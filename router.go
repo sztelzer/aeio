@@ -14,7 +14,8 @@ type WithCORS struct {
 }
 
 func (s *WithCORS) ServeHTTP(res http.ResponseWriter, req *http.Request) {
-	if origin := req.Header.Get("Origin"); origin != "" {
+	origin := req.Header.Get("Origin")
+	if origin != "" {
 		res.Header().Set("Access-Control-Allow-Origin", origin)
 		res.Header().Set("Access-Control-Allow-Methods", "POST, GET, PATCH, DELETE, PUT, OPTIONS")
 		res.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")

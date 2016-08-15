@@ -3,7 +3,6 @@ package aeio
 import (
 	"aeio/helpers/conversions"
 	"google.golang.org/appengine/datastore"
-	// "time"
 )
 
 // Create is responsible for creating the resource in the datastore. Thus, it registers the new Key.
@@ -26,7 +25,7 @@ func (r *Resource) Create(checkAncestors bool) {
 	}
 
 	if r.Object == nil {
-		r.Object, err = NewObjectKind(r.Key.Kind())
+		r.Object, err = NewObject(r.Key.Kind())
 		if err != nil {
 			r.E("initializing_object", err)
 			return
@@ -56,7 +55,7 @@ func (r *Resource) Create(checkAncestors bool) {
 		// lets assume that if we can skip parent, then this is child and will be reloaded by the parent on his afterload
 		if checkAncestors == true {
 			//clear
-			r.Object, err = NewObjectKind(r.Key.Kind()) //reset object, discard what came on request
+			r.Object, err = NewObject(r.Key.Kind()) //reset object, discard what came on request
 			if err != nil {
 				r.E("initializing_object", err)
 				return
@@ -81,7 +80,7 @@ func (r *Resource) Read() {
 	// defer r.Timing(start)
 	r.Action = "read"
 
-	r.Object, err = NewObjectKind(r.Key.Kind())
+	r.Object, err = NewObject(r.Key.Kind())
 	if err != nil {
 		r.E("initializing_object", err)
 		return
@@ -174,14 +173,26 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 		nr.Access = r.Access
 		nr.Action = "read"
 
-		// init the object. it's cheap, just a new(kind) under, and easyer than a copy
-		nr.Object, err = NewObjectKind(r.Key.Kind())
+
+
+
+		// init the object. it's cheap, just a new(kind) under, and easier than a copy
+		nr.Object, err = NewObject(r.Key.Kind())
 		if err != nil {
 			nr.E("invalid_kind", err)
 			continue
 		}
 
+		// r.L("types", errors.New(fmt.Sprintf("%+v", ObjectsRegistry)))
+		// r.L("resource", errors.New(fmt.Sprintf("%+v", nr)))
+		//
+		// ooo, err := NewObject(r.Key.Kind())
+		//
+		// r.L("kind", errors.New(fmt.Sprintf("%+v", r.Key.Kind())))
+		// r.L("obj", errors.New(fmt.Sprintf("%+v", ooo)))
+
 		nr.Object.BeforeLoad(nr)
+
 
 		nr.Key, err = t.Next(nr)
 		if err == datastore.Done {

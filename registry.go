@@ -5,18 +5,24 @@ import (
 	"reflect"
 )
 
-var ObjectsRegistry = map[string]reflect.Type{}
+var models = make(map[string]interface{})
 
-func RegisterModel(kind string, objInt interface{}) {
-	ObjectsRegistry[kind] = reflect.TypeOf(objInt)
+
+//TODO: should check if is already registered and panic (so to not compile).
+func RegisterModel(m string, o interface{}) {
+	models[m] = o
 }
 
-func NewObjectKind(kind string) (Object, error) {
-	if ObjectsRegistry[kind] != nil {
-		return nil, errors.New("Resource " + kind + " not implemented.")
+func NewObject(m string) (Object, error) {
+	if models[m] == nil {
+		return nil, errors.New("Resource " + m + " is not implemented.")
 	}
-	object := reflect.New(ObjectsRegistry[kind]).Elem()
-	concreteObject, _ := reflect.ValueOf(object).Interface().(Object)
 
-	return concreteObject, nil
+	val := reflect.ValueOf(models[m])
+	if val.Kind() == reflect.Ptr {
+		val = reflect.Indirect(val)
+	}
+	new := reflect.New(val.Type()).Interface().(Object)
+
+	return new, nil
 }
