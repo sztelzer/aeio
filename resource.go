@@ -45,8 +45,8 @@ type Object interface {
 
 type Handler func(*Resource)
 
-// InitBaseResource builds also the access object and key.
-func BaseResource(writer *http.ResponseWriter, request *http.Request) (r *Resource, err error) {
+// BaseResource builds also the access object and key.
+func RootResource(writer *http.ResponseWriter, request *http.Request) (r *Resource, err error) {
 	r = new(Resource)
 	r.Access = NewAccess(writer, request)
 	r.Key, err = Key(r.Access, r.Access.Request.URL.Path)
@@ -65,13 +65,17 @@ func InitResource(access *Access, key *datastore.Key) (r *Resource) {
 	return
 }
 
-// NewResource is used to create empty children resources. Parent path may be the "" string (root). It is initialized with an incompleteKey.
-// It doesn't initialize any object for a matter of efficiency of memory.
-func NewResource(access *Access, parentPath string, kind string) (r *Resource, err error) {
+// NewResource is used to create empty children resources. Parent path may be the "" string (root). It returns a resource with an incompleteKey.
+// It initializes an object of type kind.
+func NewResource(access *Access, parentKey *datastore.Key, kind string) (r *Resource, err error) {
 	r = new(Resource)
 	r.Access = access
-	r.Path = parentPath + "/" + kind
+	r.Path = Path(parentKey) + "/" + kind
 	r.Key, err = Key(r.Access, r.Path)
+	if err != nil {
+		return nil, err
+	}
+	r.Object, err = NewObject(kind)
 	if err != nil {
 		return nil, err
 	}
@@ -145,22 +149,6 @@ func (r *Resource) CheckAncestry() (err error) {
 		break
 	}
 	return nil
-}
-
-// AncestorKey returns the key of the nearest specified kind ancestor.
-func (r *Resource) AncestorKey(kind string) (key *datastore.Key, err error) {
-	var k = r.Key
-	for {
-		if k.Parent() != nil {
-			k = k.Parent()
-			if k.Kind() == kind {
-				return k, nil
-			}
-			continue
-		}
-		break
-	}
-	return nil, errors.New("no ancestor found for kind: " + kind)
 }
 
 // Timing is used to time the processing of resources.

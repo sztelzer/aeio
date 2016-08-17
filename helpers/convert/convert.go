@@ -1,4 +1,4 @@
-package conversions
+package convert
 
 import (
 	"math"

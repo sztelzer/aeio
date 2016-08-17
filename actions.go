@@ -1,7 +1,7 @@
 package aeio
 
 import (
-	"aeio/helpers/conversions"
+	"aeio/helpers/convert"
 	"google.golang.org/appengine/datastore"
 )
 
@@ -73,6 +73,24 @@ func (r *Resource) Create(checkAncestors bool) {
 	}
 }
 
+// this is for use inside the code, it just saves the object back. Must have an object loaded.
+// hard doesn't process any before/after object methods
+func (r *Resource) HardSave() {
+	// defer runtime.GC()
+	var err error
+	if r.Object != nil {
+		r.Key, err = datastore.Put(*r.Access.Context, r.Key, r)
+		if err != nil {
+			r.E("putting_object", err)
+			return
+		}
+		return
+	}
+	r.E("no_object_to_save", err)
+	return
+}
+
+
 func (r *Resource) Read() {
 	// defer runtime.GC()
 	var err error
@@ -98,6 +116,74 @@ func (r *Resource) Read() {
 	r.Object.AfterLoad(r)
 }
 
+func (r *Resource) Patch() {
+	var err error
+	// start := time.Now()
+	// defer r.Timing(start)
+	// defer runtime.GC()
+
+	r.Object, err = NewObject(r.Key.Kind())
+	if err != nil {
+		r.E("initializing_object", err)
+		return
+	}
+
+	r.Object.BeforeLoad(r)
+	err = datastore.Get(*r.Access.Context, r.Key, r)
+	if err != nil {
+		r.E("preloading_object", err)
+		return
+	}
+	r.Paths()
+	r.Object.AfterLoad(r)
+	if len(r.Errors) > 0 {
+		r.E("after_preloading_object", err)
+		r.Object = nil
+		return
+	}
+
+	err = r.BindJson()
+	if err != nil {
+		r.E("json_binding", err)
+		r.Object = nil
+		return
+	}
+	r.Action = "patch"
+	r.Object.BeforeSave(r)
+
+	if len(r.Errors) == 0 {
+		r.Key, err = datastore.Put(*r.Access.Context, r.Key, r) //Save should run BeforeSave() on object
+		if err != nil {
+			r.E("putting_object", err)
+			return
+		}
+		r.Object.AfterSave(r)
+
+		r.Object, err = NewObject(r.Key.Kind()) //reset object, discard what came on request
+		if err != nil {
+			r.E("initializing_object", err)
+			return
+		}
+
+		r.Object.BeforeLoad(r)
+		err = datastore.Get(*r.Access.Context, r.Key, r)
+		if err != nil {
+			r.E("reloading_object", err)
+			return
+		}
+
+		r.Count = 1
+		r.Paths()
+		r.Object.AfterLoad(r)
+
+	} else {
+		r.Object = nil
+		return
+	}
+}
+
+
+
 func (r *Resource) ReadAll() {
 	// start := time.Now()
 	// defer r.Timing(start)
@@ -113,26 +199,26 @@ func (r *Resource) ReadAll() {
 	r.RunListQuery(q)
 }
 
-// func (r *Resource) ReadAny() {
-// 	start := time.Now()
-// 	defer r.Timing(start)
-// 	// defer runtime.GC()
-// 	r.Action = "readany"
-//
-// 	var q *datastore.Query
-// 	if r.Key.Parent() != nil {
-// 		q = datastore.NewQuery(r.Key.Kind()).Ancestor(r.Key.Parent())
-// 	} else {
-// 		q = datastore.NewQuery(r.Key.Kind())
-// 	}
-// 	r.RunListQuery(q)
-// }
+func (r *Resource) ReadAny() {
+	// start := time.Now()
+	// defer r.Timing(start)
+	// defer runtime.GC()
+	r.Action = "readany"
+
+	var q *datastore.Query
+	if r.Key.Parent() != nil {
+		q = datastore.NewQuery(r.Key.Kind()).Ancestor(r.Key.Parent())
+	} else {
+		q = datastore.NewQuery(r.Key.Kind())
+	}
+	r.RunListQuery(q)
+}
 
 func (r *Resource) RunListQuery(q *datastore.Query) {
 	var err error
 
 	//default to 20 results, maximum of 100
-	length := conversions.ParseInt(r.Access.Request.FormValue("l"))
+	length := convert.ParseInt(r.Access.Request.FormValue("l"))
 	if length <= 0 {
 		length = DefaultListSize
 	}
@@ -173,9 +259,6 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 		nr.Access = r.Access
 		nr.Action = "read"
 
-
-
-
 		// init the object. it's cheap, just a new(kind) under, and easier than a copy
 		nr.Object, err = NewObject(r.Key.Kind())
 		if err != nil {
@@ -192,7 +275,6 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 		// r.L("obj", errors.New(fmt.Sprintf("%+v", ooo)))
 
 		nr.Object.BeforeLoad(nr)
-
 
 		nr.Key, err = t.Next(nr)
 		if err == datastore.Done {
@@ -217,7 +299,7 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 
 		//if depth is nil, 0 or false, reset the object after processing.
 		depth := r.Access.Request.FormValue("d")
-		if conversions.ParseInt(depth) == 0 {
+		if convert.ParseInt(depth) == 0 {
 			nr.Object = nil
 		}
 
@@ -226,4 +308,25 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 
 	r.Count = i
 	r.Paths()
+}
+
+
+func (r *Resource) Delete() {
+	var err error
+	// defer runtime.GC()
+	r.Read()
+	if r.Errors != nil {
+		return
+	}
+
+	r.Action = "delete"
+	r.Object.BeforeDelete(r)
+	if r.Errors != nil {
+		return
+	}
+
+	err = datastore.Delete(*r.Access.Context, r.Key)
+	if err != nil {
+		r.E("delete", err)
+	}
 }

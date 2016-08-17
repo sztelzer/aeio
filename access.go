@@ -11,6 +11,7 @@ type Access struct {
 	Request *http.Request
 	Context *context.Context
 	Writer  http.ResponseWriter
+	UserMeta interface{}
 }
 
 func NewAccess(writer *http.ResponseWriter, request *http.Request) (access *Access) {

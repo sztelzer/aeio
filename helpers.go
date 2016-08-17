@@ -5,12 +5,8 @@ import (
 	"errors"
 	"strconv"
 	"strings"
-
-	// "fmt"
 	"net/http"
 	"time"
-	// "runtime"
-	// "log"
 	"google.golang.org/appengine/datastore"
 	"regexp"
 )
@@ -19,6 +15,7 @@ func Forbid(r *Resource) {
 	// var m runtime.MemStats
 	// runtime.ReadMemStats(&m)
 	// r.L("memory", errors.New(fmt.Sprintf("Memory usage: %d bytes (%d system).", m.Alloc, m.Sys)))
+
 	r.Access.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 
 	if len(r.Errors) > 0 && r.Errors[0].Reference == "not_authorized" {
@@ -41,6 +38,25 @@ func Allow(r *Resource) {
 	j, _ := json.Marshal(r)
 	r.Access.Writer.Write(j)
 }
+
+func Neglect(r *Resource) {
+	// var m runtime.MemStats
+	// runtime.ReadMemStats(&m)
+	// r.L("memory", errors.New(fmt.Sprintf("Memory usage: %d bytes (%d system).", m.Alloc, m.Sys)))
+
+	r.Access.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+
+	if len(r.Errors) > 0 && r.Errors[0].Reference == "not_authorized" {
+		r.Access.Writer.WriteHeader(http.StatusNotFound)
+	} else {
+		r.Access.Writer.WriteHeader(http.StatusNotFound)
+	}
+
+	j, _ := json.Marshal(r)
+	r.Access.Writer.Write(j)
+}
+
+
 
 //Key return a key from a path using Access context to build it.
 func Key(a *Access, path string) (k *datastore.Key, err error) {
@@ -87,18 +103,18 @@ func Path(k *datastore.Key) (p string) {
 }
 
 // AncestorKey returns the key of the nearest specified kind ancestor for any given key.
-func AncestorKey(k *datastore.Key, kind string) (key *datastore.Key, err error) {
+func AncestorKey(k *datastore.Key, kind string) (key *datastore.Key) {
 	for {
 		if k.Parent() != nil {
 			k = k.Parent()
 			if k.Kind() == kind {
-				return k, nil
+				return k
 			}
 			continue
 		}
 		break
 	}
-	return nil, errors.New("no ancestor found for kind: " + kind)
+	return nil
 }
 
 func NoZeroTime(t time.Time) time.Time {

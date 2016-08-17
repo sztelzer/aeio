@@ -8,7 +8,7 @@ package aeio
 //RESIO DON'T CARE FOR ERRORS BACK, BUT IT CAN USE THE RESOURCE TO LOG OR WHATEVER.
 //THERE IS THE POSSIBILITY THAT HANDLERS ARE CALLED WITH ERRORS ALREADY SET. CONSIDER THEM!
 
-func Create(r *Resource) {
+func HandleCreate(r *Resource) {
 	if len(r.Errors) > 0 {
 		Forbid(r)
 		return
@@ -40,26 +40,44 @@ func Read(r *Resource) {
 	return
 }
 
-//
-// func Patch(r *Resource) {
-// 	if len(r.Errors) > 0 {
-// 		Forbid(r)
-// 		return
-// 	}
-//
-// 	r.Patch()
-// 	if len(r.Errors) > 0 {
-// 		Forbid(r)
-// 		return
-// 	}
-//
-// 	// j, _ := json.Marshal(r)
-// 	// r.Access.Writer.Write(j)
-// 	Allow(r)
-// 	return
-// }
-//
-func ReadAll(r *Resource) {
+
+
+
+
+func HandleRead(r *Resource) {
+	if len(r.Errors) > 0 {
+		Forbid(r)
+		return
+	}
+
+	r.Read()
+	if len(r.Errors) > 0 {
+		Forbid(r)
+		return
+	}
+
+	Allow(r)
+	return
+}
+
+
+func HandlePatch(r *Resource) {
+	if len(r.Errors) > 0 {
+		Forbid(r)
+		return
+	}
+
+	r.Patch()
+	if len(r.Errors) > 0 {
+		Forbid(r)
+		return
+	}
+
+	Allow(r)
+	return
+}
+
+func HandleReadAll(r *Resource) {
 	if len(r.Errors) > 0 {
 		Forbid(r)
 		return
@@ -71,47 +89,44 @@ func ReadAll(r *Resource) {
 		return
 	}
 
-	// j, _ := json.Marshal(r)
-	// r.Access.Writer.Write(j)
 	Allow(r)
 	return
 }
 
-//
-// func HandleReadAny(r *resio.Resource) {
-// 	if len(r.Errors) > 0 {
-// 		Forbid(r)
-// 		return
-// 	}
-//
-// 	r.ReadAny()
-// 	if len(r.Errors) > 0 {
-// 		Forbid(r)
-// 		return
-// 	}
-//
-// 	// j, _ := json.Marshal(r)
-// 	// r.Access.Writer.Write(j)
-// 	Allow(r)
-// 	return
-// }
-//
-// func HandleDelete(r *resio.Resource) {
-// 	if len(r.Errors) > 0 {
-// 		Forbid(r)
-// 		return
-// 	}
-//
-// 	r.Delete()
-// 	if len(r.Errors) > 0 {
-// 		Forbid(r)
-// 		return
-// 	}
-//
-// 	Allow(r)
-// 	return
-// }
-//
+
+func HandleReadAny(r *Resource) {
+	if len(r.Errors) > 0 {
+		Forbid(r)
+		return
+	}
+
+	r.ReadAny()
+	if len(r.Errors) > 0 {
+		Forbid(r)
+		return
+	}
+
+	Allow(r)
+	return
+}
+
+func HandleDelete(r *Resource) {
+	if len(r.Errors) > 0 {
+		Forbid(r)
+		return
+	}
+
+	r.Delete()
+	if len(r.Errors) > 0 {
+		Forbid(r)
+		return
+	}
+
+	Allow(r)
+	return
+}
+
+
 // func HandleUserToken(r *resio.Resource) {
 // 	if len(r.Errors) > 0 {
 // 		Forbid(r)
