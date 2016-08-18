@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"runtime"
 	"time"
-	// "bytes"
-	// "encoding/binary"
 )
 
 // type Resourcer interface {
@@ -81,6 +79,12 @@ func NewResource(access *Access, parentKey *datastore.Key, kind string) (r *Reso
 	}
 	return
 }
+
+// TODO: NewList()
+
+
+
+
 
 //Save puts the object into datastore, inlining CreatedAt and Parent in the object.
 func (r *Resource) Save() (ps []datastore.Property, err error) {

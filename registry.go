@@ -10,6 +10,9 @@ import (
 var models = make(map[string]interface{})
 
 func RegisterModel(m string, o interface{}) {
+	if _, dup := models[m]; dup {
+		panic("aeio: Register called twice for model " + m)
+	}
 	models[m] = o
 }
 
@@ -26,6 +29,8 @@ func NewObject(m string) (Object, error) {
 
 	return new, nil
 }
+
+
 
 //TODO: should check if models exist.
 //use empty structs so the search is trivial: children[p][c] using ok idiom.
@@ -54,3 +59,43 @@ func TestPaternity(p string, c string) (err error) {
 	}
 	return
 }
+
+
+
+
+var functions = make(map[string]map[string]struct{})
+
+func RegisterFunction(m string, f string) {
+	if TestFunction(m, f) == nil {
+		panic(fmt.Sprintln("function", f, "is alredy registered on model", m))
+	}
+
+	if functions[m] == nil {
+		functions[m] = make(map[string]struct{})
+	}
+
+	functions[m][f] = struct{}{}
+}
+
+func TestFunction(m string, f string) (err error) {
+	_, ok := functions[m][f]
+	if !ok {
+		err = errors.New( fmt.Sprintln("model", m, "doesn't have the function", f) )
+	}
+	return
+}
+
+
+// var functions = map[string][]string{
+// 	"nodes":  {"productConsumer", "productConsumerDispatch", "productBusiness", "productStaging", "productReturn", "productDiscard"},
+// 	"stocks": {"dry", "wet"},
+// }
+
+// func ValidFunction(f string, m string) (err error) {
+// 	for _, v := range FunctionsRegistry[m] {
+// 		if v == f {
+// 			return nil
+// 		}
+// 	}
+// 	return errors.New("function [" + f + "] not implemented")
+// }
