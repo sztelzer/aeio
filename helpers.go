@@ -103,6 +103,7 @@ func Path(k *datastore.Key) (p string) {
 }
 
 // AncestorKey returns the key of the nearest specified kind ancestor for any given key.
+// If there is no ancestors, it checks if itself is the kind and return itself.
 func AncestorKey(k *datastore.Key, kind string) (key *datastore.Key) {
 	for {
 		if k.Parent() != nil {
@@ -112,7 +113,9 @@ func AncestorKey(k *datastore.Key, kind string) (key *datastore.Key) {
 			}
 			continue
 		}
-		break
+		if k.Kind() == kind {
+			return k
+		}
 	}
 	return nil
 }

@@ -10,15 +10,6 @@ import (
 	"time"
 )
 
-// type Resourcer interface {
-// 	Create(*Access)
-// 	Patch(*Access)
-// 	Read(*Access)
-// 	ReadChildren(*Access)
-// 	ReadAny(*Access)
-// 	E(error)
-// }
-
 type Resource struct {
 	Path      string `datastore:"-" json:"path"`
 	Errors    []*E   `datastore:"-" json:"errors,omitempty"`
@@ -130,6 +121,46 @@ func (r *Resource) BindJson() (err error) {
 	}
 	return
 }
+
+
+
+
+func (r *Resource) UnmarshalJSON(data []byte) error {
+	type Alias Resource
+	aux := &struct {
+		Path2 string `json:"path2"`
+		*Alias
+	}{
+		Alias: (*Alias)(r),
+	}
+	var err error
+	if err = json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	r.Key, err = Key(r.Access, aux.Path2)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *Resource) MarshalJSON() ([]byte, error) {
+	type Alias Resource
+	return json.Marshal(&struct {
+		Path2 string `json:"path2"`
+		*Alias
+	}{
+		Path2:  Path(r.Key),
+		Alias: (*Alias)(r),
+	})
+}
+
+
+
+
+
+
 
 // CheckAncestry goes to the datastore to verify the existence of all ancestry parts of the resource.
 // It has a small cost as it does various queries, but uses counts.
