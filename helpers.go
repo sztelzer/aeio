@@ -3,12 +3,12 @@ package aeio
 import (
 	"encoding/json"
 	"errors"
+	"google.golang.org/appengine/datastore"
+	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
-	"net/http"
 	"time"
-	"google.golang.org/appengine/datastore"
-	"regexp"
 )
 
 func Forbid(r *Resource) {
@@ -56,8 +56,6 @@ func Neglect(r *Resource) {
 	r.Access.Writer.Write(j)
 }
 
-
-
 //Key return a key from a path using Access context to build it.
 func Key(a *Access, path string) (k *datastore.Key, err error) {
 	var kd string
@@ -86,7 +84,7 @@ func Key(a *Access, path string) (k *datastore.Key, err error) {
 	return k, nil
 }
 
-// Path returns the simple path from a Key in the format resource/id/resource/id...
+//Path returns the simple path from a Key in the format resource/id/resource/id...
 func Path(k *datastore.Key) (p string) {
 	if k.Incomplete() == false {
 		p = "/" + strconv.FormatInt(k.IntID(), 10)
@@ -128,3 +126,34 @@ func NoZeroTime(t time.Time) time.Time {
 }
 
 var ValidPath = regexp.MustCompile(`^(?:/[a-z]+/[0-9]+)*$|^(?:/[a-z]+/[0-9]+)*(?:/[a-z]+){1}$`)
+
+
+
+// CheckAncestry goes to the datastore to verify the existence of all ancestry parts of the resource.
+// It has a small cost as it does various queries, but uses counts.
+// TODO:  Maybe could use BatchQuerie.
+func (r *Resource) CheckAncestry() (err error) {
+	// defer runtime.GC()
+	var k = r.Key
+	for {
+		if k.Parent() != nil {
+			k = k.Parent()
+			q := datastore.NewQuery(k.Kind()).Filter("__key__ =", k)
+			c, err := q.Count(*r.Access.Context)
+			if err != nil {
+				return err
+			}
+			if c == 0 {
+				return errors.New("not found: " + Path(k))
+			}
+			continue
+		}
+		break
+	}
+	return nil
+}
+
+// Timing is used to time the processing of resources.
+func (r *Resource) Timing(s time.Time) {
+	r.Time = int64(time.Since(s) / time.Millisecond)
+}

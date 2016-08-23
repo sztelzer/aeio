@@ -1,14 +1,13 @@
 package secure
 
-import(
+import (
 	"crypto/rand"
-	"encoding/base64"
-	mathrand "math/rand"
-	"time"
-	"golang.org/x/crypto/pbkdf2"
 	"crypto/sha512"
+	"encoding/base64"
+	"golang.org/x/crypto/pbkdf2"
+	mathrand "math/rand"
 	"regexp"
-
+	"time"
 )
 
 func GenerateRandomBytes(n int) ([]byte, error) {

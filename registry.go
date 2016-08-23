@@ -30,8 +30,6 @@ func NewObject(m string) (Object, error) {
 	return new, nil
 }
 
-
-
 //TODO: should check if models exist.
 //use empty structs so the search is trivial: children[p][c] using ok idiom.
 var children = make(map[string]map[string]struct{})
@@ -60,9 +58,6 @@ func TestPaternity(p string, c string) (err error) {
 	return
 }
 
-
-
-
 var functions = make(map[string]map[string]struct{})
 
 func RegisterFunction(m string, f string) {
@@ -80,11 +75,10 @@ func RegisterFunction(m string, f string) {
 func TestFunction(m string, f string) (err error) {
 	_, ok := functions[m][f]
 	if !ok {
-		err = errors.New( fmt.Sprintln("model", m, "doesn't have the function", f) )
+		err = errors.New(fmt.Sprintln("model", m, "doesn't have the function", f))
 	}
 	return
 }
-
 
 // var functions = map[string][]string{
 // 	"nodes":  {"productConsumer", "productConsumerDispatch", "productBusiness", "productStaging", "productReturn", "productDiscard"},

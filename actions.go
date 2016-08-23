@@ -46,7 +46,6 @@ func (r *Resource) Create(checkAncestors bool) {
 			return
 		}
 
-		r.Paths()
 		r.Object.AfterSave(r)
 		if len(r.Errors) != 0 {
 			return
@@ -67,7 +66,6 @@ func (r *Resource) Create(checkAncestors bool) {
 				return
 			}
 			r.Count = 1
-			r.Paths()
 			r.Object.AfterLoad(r)
 		}
 	}
@@ -90,7 +88,6 @@ func (r *Resource) HardSave() {
 	return
 }
 
-
 func (r *Resource) Read() {
 	// defer runtime.GC()
 	var err error
@@ -112,7 +109,6 @@ func (r *Resource) Read() {
 	}
 
 	r.Count = 1
-	r.Paths()
 	r.Object.AfterLoad(r)
 }
 
@@ -134,7 +130,6 @@ func (r *Resource) Patch() {
 		r.E("preloading_object", err)
 		return
 	}
-	r.Paths()
 	r.Object.AfterLoad(r)
 	if len(r.Errors) > 0 {
 		r.E("after_preloading_object", err)
@@ -173,7 +168,6 @@ func (r *Resource) Patch() {
 		}
 
 		r.Count = 1
-		r.Paths()
 		r.Object.AfterLoad(r)
 
 	} else {
@@ -181,8 +175,6 @@ func (r *Resource) Patch() {
 		return
 	}
 }
-
-
 
 func (r *Resource) ReadAll() {
 	// start := time.Now()
@@ -209,6 +201,7 @@ func (r *Resource) ReadAny() {
 	if r.Key.Parent() != nil {
 		q = datastore.NewQuery(r.Key.Kind()).Ancestor(r.Key.Parent())
 	} else {
+		//this handles getting everything, including roots.
 		q = datastore.NewQuery(r.Key.Kind())
 	}
 	r.RunListQuery(q)
@@ -294,7 +287,6 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 		}
 
 		// nr.Count = 1
-		nr.Paths()
 		nr.Object.AfterLoad(nr)
 
 		//if depth is nil, 0 or false, reset the object after processing.
@@ -307,9 +299,7 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 	}
 
 	r.Count = i
-	r.Paths()
 }
-
 
 func (r *Resource) Delete() {
 	var err error

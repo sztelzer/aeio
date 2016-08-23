@@ -8,9 +8,9 @@ import (
 )
 
 type Access struct {
-	Request *http.Request
-	Context *context.Context
-	Writer  http.ResponseWriter
+	Request  *http.Request
+	Context  *context.Context
+	Writer   http.ResponseWriter
 	UserMeta interface{}
 }
 
