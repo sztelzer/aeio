@@ -72,13 +72,24 @@ func RegisterFunction(m string, f string) {
 	functions[m][f] = struct{}{}
 }
 
-func TestFunction(m string, f string) (err error) {
+func TestFunction(m string, f string) error {
 	_, ok := functions[m][f]
 	if !ok {
-		err = errors.New(fmt.Sprintln("model", m, "doesn't have the function", f))
+		return errors.New(fmt.Sprintln("model", m, "doesn't have the function", f))
 	}
-	return
+	return nil
 }
+
+// type FunctionList map[string]struct{}
+//
+// func (fl *FunctionList) Add(s string) {
+// 	fl[s] = struct{}{}
+// }
+//
+// func (fl *FunctionList) Has(s string) (ok bool){
+// 	_, ok := fl[s]
+// 	return
+// }
 
 // var functions = map[string][]string{
 // 	"nodes":  {"productConsumer", "productConsumerDispatch", "productBusiness", "productStaging", "productReturn", "productDiscard"},

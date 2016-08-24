@@ -9,37 +9,36 @@ import (
 // After returning the new resource Key, it empties the sub-object and reload the full data from the datastore.
 // This assures that any 'after load method' is processed.
 // It also calls the object.AfterLoad() method.
-func (r *Resource) Create(checkAncestors bool) {
+func (r *Resource) Create(dontCheckAncestors bool) {
 	var err error
 	// start := time.Now()
 	// defer r.Timing(start)
 	r.Action = "create"
+
 	// defer runtime.GC()
+
 	//first: check parents Paths
 	//get parent() recursively.
-	if checkAncestors == true {
-		err = r.CheckAncestry()
-		if err != nil {
-			r.E("ancestor_not_found", err)
-		}
-	}
-
-	if r.Object == nil {
-		r.Object, err = NewObject(r.Key.Kind())
-		if err != nil {
-			r.E("initializing_object", err)
-			return
-		}
-
-		err := r.BindJson()
-		if err != nil {
-			r.E("json_binding", err)
+	if dontCheckAncestors == false {
+		r.CheckAncestry()
+		if r.HasErrors() {
 			return
 		}
 	}
+
+	err = r.BindRequestObject()
+	if err != nil {
+		r.E("json_binding", err)
+		return
+	}
+
+	r.L("stockResourceBinded", r.Object)
+
+	// }
 	r.Object.BeforeSave(r)
 
 	if len(r.Errors) == 0 {
+
 		r.Key, err = datastore.Put(*r.Access.Context, r.Key, r)
 		if err != nil {
 			r.E("putting_object", err)
@@ -52,7 +51,7 @@ func (r *Resource) Create(checkAncestors bool) {
 		}
 
 		// lets assume that if we can skip parent, then this is child and will be reloaded by the parent on his afterload
-		if checkAncestors == true {
+		if dontCheckAncestors == false {
 			//clear
 			r.Object, err = NewObject(r.Key.Kind()) //reset object, discard what came on request
 			if err != nil {
@@ -137,7 +136,7 @@ func (r *Resource) Patch() {
 		return
 	}
 
-	err = r.BindJson()
+	err = r.BindRequestObject()
 	if err != nil {
 		r.E("json_binding", err)
 		r.Object = nil
