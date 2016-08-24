@@ -3,7 +3,6 @@ package aeio
 import (
 	"golang.org/x/net/context"
 	"google.golang.org/appengine"
-	// "google.golang.org/appengine/datastore"
 	"net/http"
 )
 

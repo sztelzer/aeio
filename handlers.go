@@ -11,23 +11,7 @@ func HandleCreate(r *Resource) {
 		return
 	}
 
-	r.Create(false)
-	if len(r.Errors) > 0 {
-		Forbid(r)
-		return
-	}
-
-	Allow(r)
-	return
-}
-
-func Read(r *Resource) {
-	if len(r.Errors) > 0 {
-		Forbid(r)
-		return
-	}
-
-	r.Read()
+	r.Create(true)
 	if len(r.Errors) > 0 {
 		Forbid(r)
 		return
