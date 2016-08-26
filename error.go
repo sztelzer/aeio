@@ -19,9 +19,17 @@ func (e *E) SimpleError() error {
 func (r *Resource) E(reference string, info interface{}) {
 	_, file, line, _ := runtime.Caller(1)
 	err := fmt.Sprintf("%v - %v:%v", info, file, line)
-
 	log.Errorf(*r.Access.Context, "%v: %+v", reference, err)
 	r.Errors = append(r.Errors, &E{Reference: reference, Error: err})
+	r.ErrorAction()
+}
+
+func (r *Resource) E1(reference string, info interface{}) {
+	_, file, line, _ := runtime.Caller(1)
+	err := fmt.Sprintf("%v - %v:%v", info, file, line)
+	log.Errorf(*r.Access.Context, "%v: %+v", reference, err)
+	r.Errors = append([]*E{&E{Reference: reference, Error: err}}, r.Errors...)
+	r.ErrorAction()
 }
 
 func (r *Resource) L(reference string, info interface{}) {

@@ -9,90 +9,126 @@ import (
 // After returning the new resource Key, it empties the sub-object and reload the full data from the datastore.
 // This assures that any 'after load method' is processed.
 // It also calls the object.AfterLoad() method.
-func (r *Resource) Create(dontCheckAncestors bool) {
-	var err error
+func (r *Resource) Create(skipCheckAncestors bool) {
 	// start := time.Now()
 	// defer r.Timing(start)
-	r.Action = "create"
-
 	// defer runtime.GC()
+	r.EnterAction("create")
+	if r.HasErrors(){
+		return
+	}
 
-	//first: check parents Paths
-	//get parent() recursively.
-	if dontCheckAncestors == false {
+	if !skipCheckAncestors {
 		r.CheckAncestry()
 		if r.HasErrors() {
 			return
 		}
 	}
 
-	err = r.BindRequestObject()
-	if err != nil {
-		r.E("json_binding", err)
+	// if it already have an object, don't bind
+	if r.Object == nil {
+		r.BindRequestObject()
+		if r.HasErrors(){
+			return
+		}
+	}
+
+	r.Update()
+	if r.HasErrors(){
 		return
 	}
 
-	r.L("stockResourceBinded", r.Object)
-
-	// }
-	r.Object.BeforeSave(r)
-
-	if len(r.Errors) == 0 {
-
-		r.Key, err = datastore.Put(*r.Access.Context, r.Key, r)
-		if err != nil {
-			r.E("putting_object", err)
-			return
-		}
-
-		r.Object.AfterSave(r)
-		if len(r.Errors) != 0 {
-			return
-		}
-
-		// lets assume that if we can skip parent, then this is child and will be reloaded by the parent on his afterload
-		if dontCheckAncestors == false {
-			//clear
-			r.Object, err = NewObject(r.Key.Kind()) //reset object, discard what came on request
-			if err != nil {
-				r.E("initializing_object", err)
-				return
-			}
-			r.Object.BeforeLoad(r)
-			err = datastore.Get(*r.Access.Context, r.Key, r)
-			if err != nil {
-				r.E("reloading_object", err)
-				return
-			}
-			r.Count = 1
-			r.Object.AfterLoad(r)
-		}
-	}
-}
-
-// this is for use inside the code, it just saves the object back. Must have an object loaded.
-// hard doesn't process any before/after object methods
-func (r *Resource) HardSave() {
-	// defer runtime.GC()
-	var err error
-	if r.Object != nil {
-		r.Key, err = datastore.Put(*r.Access.Context, r.Key, r)
-		if err != nil {
-			r.E("putting_object", err)
-			return
-		}
+	r.Object.BeforeLoad(r)
+	if r.HasErrors() {
 		return
 	}
-	r.E("no_object_to_save", err)
-	return
+
+	r.Object.AfterLoad(r)
+	r.ExitAction("create")
 }
 
-func (r *Resource) Read() {
-	// defer runtime.GC()
+
+
+// Update saves, but can also create the new item..
+func (r *Resource) Update() {
 	var err error
 	// start := time.Now()
 	// defer r.Timing(start)
-	r.Action = "read"
+	// defer runtime.GC()
+	r.EnterAction("update")
+
+	if r.HasErrors(){
+		return
+	}
+
+	if r.Object == nil {
+		r.E("nothing_to_save", err)
+		return
+	}
+
+	r.Object.BeforeSave(r)
+
+	r.Key, err = datastore.Put(*r.Access.Context, r.Key, r)
+	if err != nil {
+		r.E("putting_object", err)
+		return
+	}
+
+	r.Object.AfterSave(r)
+
+	r.ExitAction("update")
+}
+
+
+
+
+
+
+// HardSave is an action that just saves the object back. It doesn't process any before/after object methods.
+func (r *Resource) HardSave() {
+	var err error
+	// start := time.Now()
+	// defer r.Timing(start)
+	// defer runtime.GC()
+	r.EnterAction("hardsave")
+
+	if r.HasErrors(){
+		return
+	}
+
+	if r.Object == nil {
+		r.E("no_object_to_save", err)
+		return
+	}
+
+	_, err = datastore.Put(*r.Access.Context, r.Key, r)
+	if err != nil {
+		r.E("putting_object", err)
+		return
+	}
+
+	r.ExitAction("hardsave")
+}
+
+
+
+// Read is an action that reads a resource from datastore. It always replace the object present with a new one of the right kind.
+func (r *Resource) Read() {
+	var err error
+	// start := time.Now()
+	// defer r.Timing(start)
+	// defer runtime.GC()
+
+	r.EnterAction("read")
+
+	if r.HasErrors(){
+		return
+	}
+
+	if r.Key == nil {
+		r.E("invalid_path", nil)
+		return
+	}
 
 	r.Object, err = NewObject(r.Key.Kind())
 	if err != nil {
@@ -107,79 +143,49 @@ func (r *Resource) Read() {
 		return
 	}
 
-	r.Count = 1
 	r.Object.AfterLoad(r)
+	if r.HasErrors() {
+		return
+	}
+	r.ExitAction("read")
 }
 
+
+// Patch is an action for a special case: it always loads the original object and adjusts only the fields that come from the request.
 func (r *Resource) Patch() {
-	var err error
+	// var err error
 	// start := time.Now()
 	// defer r.Timing(start)
 	// defer runtime.GC()
+	r.EnterAction("patch")
 
-	r.Object, err = NewObject(r.Key.Kind())
-	if err != nil {
-		r.E("initializing_object", err)
+	if r.HasErrors(){
 		return
 	}
 
-	r.Object.BeforeLoad(r)
-	err = datastore.Get(*r.Access.Context, r.Key, r)
-	if err != nil {
-		r.E("preloading_object", err)
+	r.Read()
+
+	if r.HasErrors(){
 		return
 	}
-	r.Object.AfterLoad(r)
-	if len(r.Errors) > 0 {
-		r.E("after_preloading_object", err)
+
+	r.BindRequestObject()
+	if r.HasErrors(){
 		r.Object = nil
 		return
 	}
 
-	err = r.BindRequestObject()
-	if err != nil {
-		r.E("json_binding", err)
-		r.Object = nil
-		return
-	}
-	r.Action = "patch"
-	r.Object.BeforeSave(r)
+	r.Save()
 
-	if len(r.Errors) == 0 {
-		r.Key, err = datastore.Put(*r.Access.Context, r.Key, r) //Save should run BeforeSave() on object
-		if err != nil {
-			r.E("putting_object", err)
-			return
-		}
-		r.Object.AfterSave(r)
-
-		r.Object, err = NewObject(r.Key.Kind()) //reset object, discard what came on request
-		if err != nil {
-			r.E("initializing_object", err)
-			return
-		}
-
-		r.Object.BeforeLoad(r)
-		err = datastore.Get(*r.Access.Context, r.Key, r)
-		if err != nil {
-			r.E("reloading_object", err)
-			return
-		}
-
-		r.Count = 1
-		r.Object.AfterLoad(r)
-
-	} else {
-		r.Object = nil
-		return
-	}
+	r.ExitAction("patch")
 }
 
 func (r *Resource) ReadAll() {
 	// start := time.Now()
 	// defer r.Timing(start)
 	// defer runtime.GC()
-	r.Action = "readall"
+	// r.Action = "readall"
+	r.EnterAction("readall")
 
 	var q *datastore.Query
 	if r.Key.Parent() != nil {
@@ -188,13 +194,15 @@ func (r *Resource) ReadAll() {
 		q = datastore.NewQuery(r.Key.Kind())
 	}
 	r.RunListQuery(q)
+
+	r.ExitAction("readall")
 }
 
 func (r *Resource) ReadAny() {
 	// start := time.Now()
 	// defer r.Timing(start)
 	// defer runtime.GC()
-	r.Action = "readany"
+	r.EnterAction("readany")
 
 	var q *datastore.Query
 	if r.Key.Parent() != nil {
@@ -204,6 +212,8 @@ func (r *Resource) ReadAny() {
 		q = datastore.NewQuery(r.Key.Kind())
 	}
 	r.RunListQuery(q)
+
+	r.ExitAction("readany")
 }
 
 func (r *Resource) RunListQuery(q *datastore.Query) {
@@ -249,7 +259,7 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 	for {
 		nr := new(Resource)
 		nr.Access = r.Access
-		nr.Action = "read"
+		// nr.Action = "read"
 
 		// init the object. it's cheap, just a new(kind) under, and easier than a copy
 		nr.Object, err = NewObject(r.Key.Kind())
@@ -303,12 +313,14 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 func (r *Resource) Delete() {
 	var err error
 	// defer runtime.GC()
+	r.EnterAction("delete")
+
 	r.Read()
 	if r.Errors != nil {
 		return
 	}
 
-	r.Action = "delete"
+	// r.Action = "delete"
 	r.Object.BeforeDelete(r)
 	if r.Errors != nil {
 		return
@@ -318,4 +330,7 @@ func (r *Resource) Delete() {
 	if err != nil {
 		r.E("delete", err)
 	}
+
+	r.ExitAction("delete")
+
 }
