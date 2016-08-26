@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 	// "golang.org/x/net/context"
-	"errors"
+	// "errors"
 	"strconv"
 	"strings"
 )
@@ -22,10 +22,11 @@ type Resource struct {
 	Time      int64          `datastore:"-" json:"time,omitempty"`
 	CreatedAt time.Time      `datastore:"-" json:"created_at,omitempty"`
 	Access    *Access        `datastore:"-" json:"-"`
-	Action    string         `datastore:"-" json:"-"`
+	Actions   []string       `datastore:"-" json:"-"`
 }
 
 type Object interface {
+//	Validate(*Resource)
 	BeforeSave(*Resource)
 	AfterSave(*Resource)
 	BeforeLoad(*Resource)
@@ -37,10 +38,18 @@ type Object interface {
 func RootResource(writer *http.ResponseWriter, request *http.Request) (r *Resource) {
 	r = new(Resource)
 	r.Access = NewAccess(writer, request)
-	r.Key = Key(r.Access, r.Access.Request.URL.Path)
-	if r.Key == nil {
+
+	key := Key(r.Access, r.Access.Request.URL.Path)
+	if Key == nil {
 		r.E("invalid_path", nil)
 	}
+
+	err := TestKeyChainPaternity(key)
+	if err != nil {
+		r.E("invalid_path", err)
+	}
+
+	r.Key = key
 	return
 }
 
@@ -59,6 +68,12 @@ func NewResource(access *Access, parentKey *datastore.Key, kind string) (r *Reso
 	var err error
 	r = new(Resource)
 	r.Access = access
+
+	err = TestPaternity(parentKey.Kind(), kind)
+	if err != nil {
+		r.E("invalid_kind", err)
+	}
+
 	r.Key = Key(r.Access, Path(parentKey)+"/"+kind)
 	if r.Key == nil {
 		r.E("invalid_path", nil)
@@ -79,8 +94,9 @@ func NewListResource(parentResource *Resource, listKind string) (r *Resource) {
 
 //Save puts the object into datastore, inlining CreatedAt and Parent in the object.
 func (r *Resource) Save() (ps []datastore.Property, err error) {
+	r.CreatedAt = NoZeroTime(r.CreatedAt)
 	ps, err = datastore.SaveStruct(r.Object)
-	ps = append(ps, datastore.Property{Name: "CreatedAt", Value: NoZeroTime(r.CreatedAt)})
+	ps = append(ps, datastore.Property{Name: "CreatedAt", Value: r.CreatedAt})
 	ps = append(ps, datastore.Property{Name: "Parent", Value: r.Key.Parent()})
 	return
 }
@@ -165,32 +181,31 @@ func Path(k *datastore.Key) (p string) {
 // 	return
 // }
 
-func (r *Resource) BindRequestObject() (err error) {
-	if r.Access.Request.ContentLength == 0 {
-		return nil
+func (r *Resource) BindRequestObject() {
+	if r.Access.Request.ContentLength < 2 {
+		r.E("body_is_empty", nil)
+		return
 	}
 
 	bodyContent, err := ioutil.ReadAll(r.Access.Request.Body)
 	if err != nil {
-		return err
+		r.E("body_is_weird", nil)
+		return
 	}
-
-	r.L("body_content", errors.New(string(bodyContent)))
-	// return errors.New("halt!")
 
 	if r.Object == nil {
 		r.Object, err = NewObject(r.Key.Kind())
 		if err != nil {
-			return err
+			r.E("initializing_object", err)
+			return
 		}
 	}
 
 	err = json.Unmarshal(bodyContent, &r.Object)
 	if err != nil {
-		return err
+		r.E("json_binding", err)
+		return
 	}
-
-	return
 }
 
 func (r *Resource) MarshalJSON() ([]byte, error) {
@@ -204,12 +219,18 @@ func (r *Resource) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// CheckAncestry goes to the datastore to verify the existence of all ancestry parts of the resource.
-// It has a small cost as it does various queries, but uses counts.
-// TODO:  Maybe could use BatchQuerie.
-
+// CheckAncestry verifies the path for full validity. First it checks for chain paternity issues. Second it check if ancestors really exist in the datastore.
+// This means that change to paternity rules or deleted ancestors will block the creation of a new child.
+// TODO: Maybe could use BatchQuerie.
 func (r *Resource) CheckAncestry() {
 	var k = r.Key
+	//test paternity
+	err := TestKeyChainPaternity(k)
+	if err != nil {
+		r.E("broken_ancestor_chain", err)
+		return
+	}
+	//test existence
 	for {
 		if k.Parent() != nil {
 			k = k.Parent()
@@ -273,3 +294,16 @@ func (r *Resource) Cross(key **datastore.Key, path *string) (ok bool) {
 	r.E("invalid_path", *path)
 	return false
 }
+
+
+// func (r *Resource) SetAction(action string) {
+// 	if r.Action == "" && ValidAction(action){
+// 		r.Action = action
+// 	}
+// }
+//
+// func (r *Resource) ChangeAction(action string) {
+// 	if ValidAction(action) {
+// 		r.Action = action
+// 	}
+// }
