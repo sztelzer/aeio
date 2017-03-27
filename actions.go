@@ -3,6 +3,7 @@ package aeio
 import (
 	"aeio/helpers/convert"
 	"google.golang.org/appengine/datastore"
+	"time"
 )
 
 // Create is responsible for creating the resource in the datastore. Thus, it registers the new Key.
@@ -14,7 +15,12 @@ func (r *Resource) Create(skipCheckAncestors bool) {
 	// defer r.Timing(start)
 	// defer runtime.GC()
 	r.EnterAction("create")
-	if r.HasErrors(){
+	if r.HasErrors() {
+		return
+	}
+
+	if err := TestKeyChainPaternity(r.Key); err != nil {
+		r.E("invalid_path", err)
 		return
 	}
 
@@ -28,13 +34,13 @@ func (r *Resource) Create(skipCheckAncestors bool) {
 	// if it already have an object, don't bind
 	if r.Object == nil {
 		r.BindRequestObject()
-		if r.HasErrors(){
+		if r.HasErrors() {
 			return
 		}
 	}
 
 	r.Update()
-	if r.HasErrors(){
+	if r.HasErrors() {
 		return
 	}
 
@@ -47,8 +53,6 @@ func (r *Resource) Create(skipCheckAncestors bool) {
 	r.ExitAction("create")
 }
 
-
-
 // Update saves, but can also create the new item..
 func (r *Resource) Update() {
 	var err error
@@ -57,7 +61,7 @@ func (r *Resource) Update() {
 	// defer runtime.GC()
 	r.EnterAction("update")
 
-	if r.HasErrors(){
+	if r.HasErrors() {
 		return
 	}
 
@@ -67,6 +71,9 @@ func (r *Resource) Update() {
 	}
 
 	r.Object.BeforeSave(r)
+	if r.HasErrors() {
+		return
+	}
 
 	r.Key, err = datastore.Put(*r.Access.Context, r.Key, r)
 	if err != nil {
@@ -74,15 +81,12 @@ func (r *Resource) Update() {
 		return
 	}
 
+	r.SetMem()
+
 	r.Object.AfterSave(r)
 
 	r.ExitAction("update")
 }
-
-
-
-
-
 
 // HardSave is an action that just saves the object back. It doesn't process any before/after object methods.
 func (r *Resource) HardSave() {
@@ -92,7 +96,7 @@ func (r *Resource) HardSave() {
 	// defer runtime.GC()
 	r.EnterAction("hardsave")
 
-	if r.HasErrors(){
+	if r.HasErrors() {
 		return
 	}
 
@@ -107,21 +111,21 @@ func (r *Resource) HardSave() {
 		return
 	}
 
+	r.SetMem()
+
 	r.ExitAction("hardsave")
 }
-
-
 
 // Read is an action that reads a resource from datastore. It always replace the object present with a new one of the right kind.
 func (r *Resource) Read() {
 	var err error
-	// start := time.Now()
-	// defer r.Timing(start)
+	start := time.Now()
+	defer r.Timing(start)
 	// defer runtime.GC()
 
 	r.EnterAction("read")
 
-	if r.HasErrors(){
+	if r.HasErrors() {
 		return
 	}
 
@@ -137,10 +141,15 @@ func (r *Resource) Read() {
 	}
 
 	r.Object.BeforeLoad(r)
-	err = datastore.Get(*r.Access.Context, r.Key, r)
+
+	err = r.GetMem()
 	if err != nil {
-		r.E("loading_object: "+Path(r.Key), err)
-		return
+		err = datastore.Get(*r.Access.Context, r.Key, r)
+		if err != nil {
+			r.E("loading_object: "+Path(r.Key), err)
+			return
+		}
+		r.SetMem()
 	}
 
 	r.Object.AfterLoad(r)
@@ -150,7 +159,6 @@ func (r *Resource) Read() {
 	r.ExitAction("read")
 }
 
-
 // Patch is an action for a special case: it always loads the original object and adjusts only the fields that come from the request.
 func (r *Resource) Patch() {
 	// var err error
@@ -159,23 +167,23 @@ func (r *Resource) Patch() {
 	// defer runtime.GC()
 	r.EnterAction("patch")
 
-	if r.HasErrors(){
+	if r.HasErrors() {
 		return
 	}
 
 	r.Read()
 
-	if r.HasErrors(){
+	if r.HasErrors() {
 		return
 	}
 
 	r.BindRequestObject()
-	if r.HasErrors(){
+	if r.HasErrors() {
 		r.Object = nil
 		return
 	}
 
-	r.Save()
+	r.Update()
 
 	r.ExitAction("patch")
 }
@@ -330,6 +338,8 @@ func (r *Resource) Delete() {
 	if err != nil {
 		r.E("delete", err)
 	}
+
+	r.DelMem()
 
 	r.ExitAction("delete")
 

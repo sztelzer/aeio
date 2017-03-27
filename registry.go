@@ -3,8 +3,10 @@ package aeio
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"google.golang.org/appengine/datastore"
+	"reflect"
+	// "google.golang.org/appengine/log"
+	"encoding/gob"
 )
 
 //models are the backbone of AEIO. They allow AEIO to instantiate new objects.
@@ -14,6 +16,7 @@ func RegisterModel(m string, o interface{}) {
 	if _, dup := models[m]; dup {
 		panic("aeio: Register called twice for model " + m)
 	}
+	gob.Register(o)
 	models[m] = o
 }
 
@@ -63,18 +66,16 @@ func TestKeyChainPaternity(k *datastore.Key) (err error) {
 			if err != nil {
 				return
 			}
+			continue
 		}
 		//no more parent, test for ""
-		err = TestPaternity("", kind)
+		err = TestPaternity("", k.Kind())
 		if err != nil {
 			return
 		}
 		return nil
 	}
 }
-
-
-
 
 // functions allowed to specific models.
 // register the allowed functions with the model, after registering it.
@@ -93,30 +94,27 @@ func RegisterFunction(m string, f string) {
 func TestFunction(m string, f string) error {
 	_, ok := functions[m][f]
 	if !ok {
-		return errors.New(fmt.Sprintln("model", m, "doesn't have the function", f))
+		return errors.New(fmt.Sprintf("%v", "model"+m+"doesn't have the function"+f))
 	}
 	return nil
 }
 
-
-
 // actions maps what is being made with the resource so other parts of the code can be aware and take decisions.
 
 var actions = map[string]struct{}{
-	"error": struct{}{},
-	"create": struct{}{},
-	"read": struct{}{},
-	"readall": struct{}{},
-	"readany": struct{}{},
-	"update": struct{}{},
-	"save": struct{}{},
-	"hardsave": struct{}{},
-	"patch": struct{}{},
-	"delete": struct{}{},
+	"error":    {},
+	"create":   {},
+	"read":     {},
+	"readall":  {},
+	"readany":  {},
+	"update":   {},
+	"save":     {},
+	"hardsave": {},
+	"patch":    {},
+	"delete":   {},
 }
 
-
-func RegisterAction(action string){
+func RegisterAction(action string) {
 	_, ok := actions[action]
 	if ok {
 		panic(fmt.Sprintln("action", action, "is already registered"))
@@ -129,46 +127,4 @@ func ValidAction(action string) {
 	if !ok {
 		panic(fmt.Sprintf("%v: %v", "invalid_action", action))
 	}
-}
-
-func (r *Resource) EnterAction(action string) {
-	if r.Action("error") {
-		return
-	}
-
-	ValidAction(action)
-	if len(r.Actions) > 0 {
-		if r.Actions[len(r.Actions)-1] == action {
-			panic(fmt.Sprintln("repeated_action"))
-		}
-	}
-	r.Actions = append(r.Actions, action)
-}
-
-func (r *Resource) ExitAction(action string) {
-	if r.Action("error") && action != "error" {
-		return
-	}
-
-	ValidAction(action)
-	if len(r.Actions) > 0 {
-		if r.Actions[len(r.Actions)-1] != action {
-			panic(fmt.Sprintln("exiting_wrong_action"))
-		}
-		r.Actions = r.Actions[:len(r.Actions)-1]
-	} else {
-		panic(fmt.Sprintln("nothing_to_exit"))
-	}
-}
-
-func (r *Resource) ErrorAction() {
-	r.Actions = nil
-	r.EnterAction("error")
-}
-
-func (r *Resource) Action(action string) (ok bool) {
-	if len(r.Actions) > 0 {
-		return r.Actions[0] == action
-	}
-	return
 }

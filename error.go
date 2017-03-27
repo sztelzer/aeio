@@ -28,7 +28,7 @@ func (r *Resource) E1(reference string, info interface{}) {
 	_, file, line, _ := runtime.Caller(1)
 	err := fmt.Sprintf("%v - %v:%v", info, file, line)
 	log.Errorf(*r.Access.Context, "%v: %+v", reference, err)
-	r.Errors = append([]*E{&E{Reference: reference, Error: err}}, r.Errors...)
+	r.Errors = append([]*E{{Reference: reference, Error: err}}, r.Errors...)
 	r.ErrorAction()
 }
 

@@ -71,6 +71,15 @@ func AncestorKey(k *datastore.Key, kind string) (key *datastore.Key) {
 	return nil
 }
 
+func OwnerKey(k *datastore.Key) (key *datastore.Key) {
+	for {
+		if k.Parent() == nil {
+			return k
+		}
+		k = k.Parent()
+	}
+}
+
 func NoZeroTime(t time.Time) time.Time {
 	if t.IsZero() {
 		t = time.Now().Local()
