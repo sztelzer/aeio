@@ -3,8 +3,9 @@ package aeio
 import (
 	"errors"
 	"fmt"
-	"google.golang.org/appengine/log"
 	"runtime"
+
+	"google.golang.org/appengine/log"
 )
 
 type E struct {

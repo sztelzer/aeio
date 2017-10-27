@@ -3,14 +3,15 @@ package aeio
 import (
 	"encoding/json"
 	"fmt"
-	"google.golang.org/appengine/datastore"
-	"google.golang.org/appengine/memcache"
-	"google.golang.org/appengine/search"
 	"io/ioutil"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"google.golang.org/appengine/datastore"
+	"google.golang.org/appengine/memcache"
+	"google.golang.org/appengine/search"
 )
 
 type Resource struct {

@@ -4,10 +4,11 @@ import (
 	"crypto/rand"
 	"crypto/sha512"
 	"encoding/base64"
-	"golang.org/x/crypto/pbkdf2"
 	mathrand "math/rand"
 	"regexp"
 	"time"
+
+	"golang.org/x/crypto/pbkdf2"
 )
 
 func GenerateRandomBytes(n int) ([]byte, error) {

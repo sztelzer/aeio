@@ -1,9 +1,10 @@
 package aeio
 
 import (
-	"aeio/helpers/convert"
-	"google.golang.org/appengine/datastore"
 	"time"
+
+	"github.com/sztelzer/aeio/helpers/convert"
+	"google.golang.org/appengine/datastore"
 )
 
 // Create is responsible for creating the resource in the datastore. Thus, it registers the new Key.

@@ -3,8 +3,9 @@ package aeio
 import (
 	"errors"
 	"fmt"
-	"google.golang.org/appengine/datastore"
 	"reflect"
+
+	"google.golang.org/appengine/datastore"
 	// "google.golang.org/appengine/log"
 	"encoding/gob"
 )
