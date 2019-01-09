@@ -11,14 +11,15 @@ func NewRouter() *mux.Router {
 }
 
 type WithCORS struct {
-	Router *mux.Router
+	Router  *mux.Router
+	Handler http.Handler
 }
 
 func (s *WithCORS) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	origin := req.Header.Get("Origin")
 	if origin != "" {
 		res.Header().Set("Access-Control-Allow-Origin", origin)
-		res.Header().Set("Access-Control-Allow-Methods", "POST, GET, PATCH, DELETE, PUT, OPTIONS")
+		res.Header().Set("Access-Control-Allow-Methods", "POST, GET, PATCH, DELETE, PUT, OPTIONS, HEAD")
 		res.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 		res.Header().Set("Content-Type", "application/json")
 	}
@@ -28,5 +29,5 @@ func (s *WithCORS) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 	// Lets Gorilla work
-	s.Router.ServeHTTP(res, req)
+	s.Handler.ServeHTTP(res, req)
 }
