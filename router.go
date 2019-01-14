@@ -11,7 +11,7 @@ func NewRouter() *mux.Router {
 }
 
 type WithCORS struct {
-	Router  *mux.Router
+	Router *mux.Router
 }
 
 func (s *WithCORS) ServeHTTP(res http.ResponseWriter, req *http.Request) {
