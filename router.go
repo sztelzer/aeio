@@ -12,7 +12,6 @@ func NewRouter() *mux.Router {
 
 type WithCORS struct {
 	Router  *mux.Router
-	Handler http.Handler
 }
 
 func (s *WithCORS) ServeHTTP(res http.ResponseWriter, req *http.Request) {
@@ -29,5 +28,5 @@ func (s *WithCORS) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 	// Lets Gorilla work
-	s.Handler.ServeHTTP(res, req)
+	s.Router.ServeHTTP(res, req)
 }
