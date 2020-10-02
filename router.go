@@ -1,32 +1,24 @@
 package aeio
 
 import (
+	"fmt"
+	"log"
 	"net/http"
-
-	"github.com/gorilla/mux"
+	"os"
 )
 
-func NewRouter() *mux.Router {
-	return mux.NewRouter()
-}
+var ServerHost string = "localhost"
+var ServerPort string = "8080"
 
-type WithCORS struct {
-	Router *mux.Router
-}
 
-func (s *WithCORS) ServeHTTP(res http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-	if origin != "" {
-		res.Header().Set("Access-Control-Allow-Origin", origin)
-		res.Header().Set("Access-Control-Allow-Methods", "POST, GET, PATCH, DELETE, PUT, OPTIONS, HEAD")
-		res.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-		res.Header().Set("Content-Type", "application/json")
+func Serve(router http.Handler) {
+	if p := os.Getenv("PORT"); p != "" {
+		ServerPort = p
+		ServerHost = ""
 	}
+	connectionString := fmt.Sprintf("%s:%s", ServerHost, ServerPort)
 
-	// Stop here for a Preflighted OPTIONS request.
-	if req.Method == "OPTIONS" {
-		return
-	}
-	// Lets Gorilla work
-	s.Router.ServeHTTP(res, req)
+	log.Printf("Serving HTTP on port %s", ServerPort)
+	log.Fatal(http.ListenAndServe(connectionString, router))
 }
+

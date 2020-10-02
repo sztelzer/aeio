@@ -1,24 +1,31 @@
 package aeio
 
 import (
-	"net/http"
-
-	"golang.org/x/net/context"
+	"cloud.google.com/go/datastore"
+	"context"
 	"google.golang.org/appengine"
+	"net/http"
 )
 
 type Access struct {
-	Request  *http.Request
-	Context  *context.Context
-	Writer   http.ResponseWriter
-	UserMeta interface{}
+	Request   *http.Request
+	Writer    http.ResponseWriter
+	Context   *context.Context
+	Datastore *datastore.Client
+	//UserMeta  interface{}
 }
 
-func NewAccess(writer *http.ResponseWriter, request *http.Request) (access *Access) {
-	access = new(Access)
-	access.Request = request
-	context := appengine.NewContext(request)
-	access.Context = &context
-	access.Writer = *writer
-	return
+func newAccess(writer *http.ResponseWriter, request *http.Request) *Access {
+	requestContext := appengine.NewContext(request)
+	datastoreClient, err := datastore.NewClient(requestContext, datastore.DetectProjectID)
+	if err != nil {
+		panic(err)
+	}
+
+	return &Access{
+		Request:   request,
+		Writer:    *writer,
+		Context:   &requestContext,
+		Datastore: datastoreClient,
+	}
 }

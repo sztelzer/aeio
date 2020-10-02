@@ -3,37 +3,32 @@ package aeio
 import (
 	"errors"
 	"fmt"
-	"runtime"
-
 	"google.golang.org/appengine/log"
+	"runtime"
 )
 
-type E struct {
+type Error struct {
 	Reference string `json:"reference"`
-	Error     string `json:"error"`
+	Error     string `json:"Error"`
 }
 
-func (e *E) SimpleError() error {
-	return errors.New(fmt.Sprintf("%v: %v", e.Reference, e.Error))
-}
-
-func (r *Resource) E(reference string, info interface{}) {
+func (r *Resource) Error(reference string, info interface{}) {
 	_, file, line, _ := runtime.Caller(1)
 	err := fmt.Sprintf("%v - %v:%v", info, file, line)
 	log.Errorf(*r.Access.Context, "%v: %+v", reference, err)
-	r.Errors = append(r.Errors, &E{Reference: reference, Error: err})
+	r.Errors = append(r.Errors, Error{Reference: reference, Error: err})
 	r.ErrorAction()
 }
 
-func (r *Resource) E1(reference string, info interface{}) {
+func (r *Resource) ErrorFirst(reference string, info interface{}) {
 	_, file, line, _ := runtime.Caller(1)
 	err := fmt.Sprintf("%v - %v:%v", info, file, line)
 	log.Errorf(*r.Access.Context, "%v: %+v", reference, err)
-	r.Errors = append([]*E{{Reference: reference, Error: err}}, r.Errors...)
+	r.Errors = append([]Error{{Reference: reference, Error: err}}, r.Errors...)
 	r.ErrorAction()
 }
 
-func (r *Resource) L(reference string, info interface{}) {
+func (r *Resource) Log(reference string, info interface{}) {
 	err := fmt.Sprintf("%+v", info)
 	log.Infof(*r.Access.Context, "%v: %+v", reference, err)
 }
@@ -49,12 +44,16 @@ func (r *Resource) Ok() bool {
 	return !r.HasErrors()
 }
 
-func (r *Resource) GetErrors(subResource *Resource) bool {
-	if subResource.HasErrors() {
-		r.Errors = append(r.Errors, subResource.Errors...)
+func (r *Resource) ImportErrors(b *Resource) bool {
+	if b.HasErrors() {
+		r.Errors = append(r.Errors, b.Errors...)
 		return true
 	}
 	return false
+}
+
+func (e *Error) SimpleError() error {
+	return errors.New(fmt.Sprintf("%v: %v", e.Reference, e.Error))
 }
 
 func (r *Resource) OneError() error {

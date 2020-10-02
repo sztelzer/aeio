@@ -1,61 +1,62 @@
 package aeio
 
 import (
+	"cloud.google.com/go/datastore"
 	"encoding/json"
 	"fmt"
+	"google.golang.org/appengine/memcache"
+	"google.golang.org/appengine/search"
 	"io/ioutil"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
-
-	"google.golang.org/appengine/datastore"
-	"google.golang.org/appengine/memcache"
-	"google.golang.org/appengine/search"
 )
+
+var DefaultListSize int
+var MaxListSize int
 
 type Resource struct {
 	Key       *datastore.Key   `datastore:"-" json:"-"`
-	Errors    []*E             `datastore:"-" json:"errors"`
-	Object    Object           `datastore:"-" json:"object,omitempty"`
+	Data      Objector         `datastore:"-" json:"data,omitempty"`
+	Errors    []Error          `datastore:"-" json:"errors"`
+	CreatedAt time.Time        `datastore:"-" json:"created_at,omitempty"`
+	Access    *Access          `datastore:"-" json:"-"`
+	Actions   []string         `datastore:"-" json:"-"`
 	Count     int              `datastore:"-" json:"count,omitempty"`
 	Next      string           `datastore:"-" json:"next,omitempty"`
 	Resources []*Resource      `datastore:"-" json:"resources,omitempty"`
 	Time      int64            `datastore:"-" json:"time,omitempty"`
-	CreatedAt time.Time        `datastore:"-" json:"created_at,omitempty"`
-	Access    *Access          `datastore:"-" json:"-"`
-	Actions   []string         `datastore:"-" json:"-"`
 	Doc       *Doc             `datastore:"-" json:"docs"`
 	Previous  []*datastore.Key `datastore:"-" json:"-"`
 }
 
-type Object interface {
+type Objector interface {
 	BeforeSave(*Resource)
 	AfterSave(*Resource)
 	BeforeLoad(*Resource)
 	AfterLoad(*Resource)
 	BeforeDelete(*Resource)
-	AddDocument(*Resource)
+	Index(*Resource)
 }
 
-// BaseResource builds also the access object and key.
+// RootResource initializes the root resource with information from the request
 func RootResource(writer *http.ResponseWriter, request *http.Request) (r *Resource) {
 	r = new(Resource)
-	r.Access = NewAccess(writer, request)
-
-	key := Key(r.Access, r.Access.Request.URL.Path)
-	if Key == nil {
-		r.E("invalid_path", nil)
+	r.Access = newAccess(writer, request)
+	r.Key = Key(r.Access.Request.URL.Path)
+	if r.Key == nil {
+		r.Error("invalid_path", nil)
 	}
-
-	r.Key = key
 	return
 }
 
-// InitResource uses a Complete Key to init a specific resource. The resource returned is ready to be actioned.
-func InitResource(access *Access, key *datastore.Key) (r *Resource) {
+// InitResource uses a Key to initialize a specific resource beyond the root resource. The resource returned is ready to be actioned.
+// Exemples are returning sub resources or even something outside the scope of root.
+func InitResource(meta *Access, key *datastore.Key) (r *Resource) {
 	r = new(Resource)
-	r.Access = access
+	r.Access = meta
 	r.Key = key
 	return
 }
@@ -68,19 +69,19 @@ func NewResource(access *Access, parentKey *datastore.Key, kind string) (r *Reso
 	r = new(Resource)
 	r.Access = access
 
-	err = TestPaternity(parentKey.Kind(), kind)
+	err = ValidatePaternity(parentKey.Kind, kind)
 	if err != nil {
-		r.E("invalid_kind", err)
+		r.Error("invalid_kind", err)
 	}
 
-	r.Key = Key(r.Access, Path(parentKey)+"/"+kind)
+	r.Key = Key(Path(parentKey) + "/" + kind)
 	if r.Key == nil {
-		r.E("invalid_path", nil)
+		r.Error("invalid_path", nil)
 		return
 	}
-	r.Object, err = NewObject(kind)
+	r.Data, err = NewObject(kind)
 	if err != nil {
-		r.E("invalid_kind", nil)
+		r.Error("invalid_kind", nil)
 		return
 	}
 	return
@@ -94,9 +95,9 @@ func NewListResource(parentResource *Resource, listKind string) (r *Resource) {
 //Save puts the object into datastore, inlining CreatedAt and Parent in the object.
 func (r *Resource) Save() (ps []datastore.Property, err error) {
 	r.CreatedAt = NoZeroTime(r.CreatedAt)
-	ps, err = datastore.SaveStruct(r.Object)
+	ps, err = datastore.SaveStruct(r.Data)
 	ps = append(ps, datastore.Property{Name: "CreatedAt", Value: r.CreatedAt})
-	ps = append(ps, datastore.Property{Name: "Parent", Value: r.Key.Parent()})
+	ps = append(ps, datastore.Property{Name: "Parent", Value: r.Key.Parent})
 	return
 }
 
@@ -112,12 +113,12 @@ func (r *Resource) Load(ps []datastore.Property) (err error) {
 			ps2 = append(ps2, p)
 		}
 	}
-	err = datastore.LoadStruct(r.Object, ps2)
+	err = datastore.LoadStruct(r.Data, ps2)
 	return
 }
 
 //Key transforms a path in a datastore key using an access.
-func Key(access *Access, path string) (k *datastore.Key) {
+func Key(path string) (k *datastore.Key) {
 	var kd string
 	var id int64
 	var p []string
@@ -136,9 +137,9 @@ func Key(access *Access, path string) (k *datastore.Key) {
 		kd = p[i]
 		if i < len(p)-1 {
 			id, _ = strconv.ParseInt(p[i+1], 10, 64)
-			k = datastore.NewKey(*access.Context, kd, "", id, k)
+			k = datastore.IDKey(kd, id, k)
 		} else {
-			k = datastore.NewIncompleteKey(*access.Context, kd, k)
+			k = datastore.IncompleteKey(kd, k)
 		}
 	}
 	return k
@@ -147,43 +148,49 @@ func Key(access *Access, path string) (k *datastore.Key) {
 //Path transforms a datastore Key into a Path
 func Path(k *datastore.Key) (p string) {
 	if k.Incomplete() == false {
-		p = "/" + strconv.FormatInt(k.IntID(), 10)
+		p = "/" + strconv.FormatInt(k.ID, 10)
 	}
-	p = "/" + k.Kind() + p
+	p = "/" + k.Kind + p
 	for {
-		k = k.Parent()
+		k = k.Parent
 		if k == nil {
 			break
 		}
-		p = "/" + k.Kind() + "/" + strconv.FormatInt(k.IntID(), 10) + p
+		p = "/" + k.Kind + "/" + strconv.FormatInt(k.ID, 10) + p
 	}
 	return p
 }
 
-func (r *Resource) BindRequestObject() {
-	var err error
-	if r.Object == nil {
-		r.Object, err = NewObject(r.Key.Kind())
-		if err != nil {
-			r.E("initializing_object", err)
-			return
-		}
+func (r *Resource) NewEmptyObject(kind string) {
+	if models[kind] == nil {
+		r.Error("initializing_object", "Resource "+kind+" is not implemented.")
+		return
+	}
+	val := reflect.ValueOf(models[kind])
+	if val.Kind() == reflect.Ptr {
+		val = reflect.Indirect(val)
+	}
+	r.Data = reflect.New(val.Type()).Interface().(Objector)
+}
+
+func (r *Resource) ObjectFromRequest() {
+	if r.Data == nil {
+		r.NewEmptyObject(r.Key.Kind)
 	}
 
 	if r.Access.Request.ContentLength < 2 {
-		// r.E("body_is_empty", nil)
 		return
 	}
 
 	bodyContent, err := ioutil.ReadAll(r.Access.Request.Body)
 	if err != nil {
-		r.E("body_is_weird", nil)
+		r.Error("reading_body", nil)
 		return
 	}
 
-	err = json.Unmarshal(bodyContent, &r.Object)
+	err = json.Unmarshal(bodyContent, &r.Data)
 	if err != nil {
-		r.E("json_binding", err)
+		r.Error("json_unmarshaling", err)
 		return
 	}
 }
@@ -199,29 +206,29 @@ func (r *Resource) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// CheckAncestry verifies the path for full validity. First it checks for chain paternity issues. Second it check if ancestors really exist in the datastore.
+// CheckAncestryExistence verifies the path for full validity. First it checks for chain paternity issues. Second it check if ancestors really exist in the datastore.
 // This means that change to paternity rules or deleted ancestors will block the creation of a new child.
-// TODO: Maybe could use BatchQuerie.
-func (r *Resource) CheckAncestry() {
+// TODO: Maybe could use BatchQuery.
+func (r *Resource) CheckAncestryExistence() {
 	var k = r.Key
 	//test paternity
-	err := TestKeyChainPaternity(k)
+	err := ValidatePaternityChain(k)
 	if err != nil {
-		r.E("broken_ancestor_chain", err)
+		r.Error("broken_ancestor_chain", err)
 		return
 	}
 	//test existence
 	for {
-		if k.Parent() != nil {
-			k = k.Parent()
-			q := datastore.NewQuery(k.Kind()).Filter("__key__ =", k)
-			c, err := q.Count(*r.Access.Context)
+		if k.Parent != nil {
+			k = k.Parent
+			q := datastore.NewQuery(k.Kind).Filter("__key__ =", k).KeysOnly()
+			c, err := r.Access.Datastore.Count(*r.Access.Context, q)
 			if err != nil {
-				r.E("ancestor_not_found", err)
+				r.Error("ancestor_not_found", err)
 				break
 			}
 			if c == 0 {
-				r.E("ancestor_not_found", Path(k))
+				r.Error("ancestor_not_found", Path(k))
 				break
 			}
 			continue
@@ -232,11 +239,11 @@ func (r *Resource) CheckAncestry() {
 
 func (r *Resource) Cross(key **datastore.Key, path *string) (ok bool) {
 	if *path != "" && *key == nil {
-		*key = Key(r.Access, *path)
+		*key = Key(*path)
 		if *key != nil {
 			return true
 		}
-		r.E("invalid_path", *path)
+		r.Error("invalid_path", *path)
 		return false
 	}
 
@@ -246,64 +253,23 @@ func (r *Resource) Cross(key **datastore.Key, path *string) (ok bool) {
 			return true
 		}
 		k := *key
-		r.E("invalid_key", k.String())
+		r.Error("invalid_key", k.String())
 		return false
 	}
 
-	r.E("invalid_path", *path)
+	r.Error("invalid_path", *path)
 	return false
 }
 
-type rgob struct {
-	Object    Object
-	CreatedAt time.Time
-}
-
-func (r *Resource) SetMem() {
-	memitem := &memcache.Item{
-		Key:        r.Key.Encode(),
-		Expiration: time.Duration(24*7) * time.Hour,
-		Object: &rgob{
-			Object:    r.Object,
-			CreatedAt: r.CreatedAt,
-		},
+func (r *Resource) Action(action string) (ok bool) {
+	if len(r.Actions) > 0 {
+		return r.Actions[0] == action
 	}
-
-	if r.PreviousAction("create") {
-		err := memcache.Gob.Add(*r.Access.Context, memitem)
-		if err != nil {
-			r.L("memcache_set", err)
-		}
-		return
-	}
-
-	err := memcache.Gob.Set(*r.Access.Context, memitem)
-	if err != nil {
-		r.L("memcache_set", err)
-	}
-}
-
-func (r *Resource) GetMem() (err error) {
-	data := new(rgob)
-	_, err = memcache.Gob.Get(*r.Access.Context, r.Key.Encode(), data)
-	if err != nil {
-		r.L("memcache_get", err)
-		return
-	}
-	r.Object = data.Object
-	r.CreatedAt = data.CreatedAt
-	return
-}
-
-func (r *Resource) DelMem() {
-	err := memcache.Delete(*r.Access.Context, r.Key.Encode())
-	if err != nil {
-		r.L("memcache_del", err)
-	}
+	return false
 }
 
 func (r *Resource) EnterAction(action string) {
-	if r.Action("error") {
+	if r.Action("Error") {
 		return
 	}
 
@@ -317,7 +283,7 @@ func (r *Resource) EnterAction(action string) {
 }
 
 func (r *Resource) ExitAction(action string) {
-	if r.Action("error") && action != "error" {
+	if r.Action("Error") && action != "Error" {
 		return
 	}
 
@@ -334,14 +300,7 @@ func (r *Resource) ExitAction(action string) {
 
 func (r *Resource) ErrorAction() {
 	r.Actions = nil
-	r.EnterAction("error")
-}
-
-func (r *Resource) Action(action string) (ok bool) {
-	if len(r.Actions) > 0 {
-		return r.Actions[0] == action
-	}
-	return
+	r.EnterAction("Error")
 }
 
 func (r *Resource) PreviousAction(action string) (ok bool) {
@@ -349,6 +308,54 @@ func (r *Resource) PreviousAction(action string) (ok bool) {
 		return r.Actions[len(r.Actions)-2] == action
 	}
 	return
+}
+
+type rgob struct {
+	Object    Objector
+	CreatedAt time.Time
+}
+
+func (r *Resource) SetMem() {
+	memitem := &memcache.Item{
+		Key:        r.Key.Encode(),
+		Expiration: time.Duration(24*7) * time.Hour,
+		Object: &rgob{
+			Object:    r.Data,
+			CreatedAt: r.CreatedAt,
+		},
+	}
+
+	if r.PreviousAction("create") {
+		err := memcache.Gob.Add(*r.Access.Context, memitem)
+		if err != nil {
+			r.Log("memcache_set", err)
+		}
+		return
+	}
+
+	err := memcache.Gob.Set(*r.Access.Context, memitem)
+	if err != nil {
+		r.Log("memcache_set", err)
+	}
+}
+
+func (r *Resource) GetMem() (err error) {
+	data := new(rgob)
+	_, err = memcache.Gob.Get(*r.Access.Context, r.Key.Encode(), data)
+	if err != nil {
+		r.Log("memcache_get", err)
+		return
+	}
+	r.Data = data.Object
+	r.CreatedAt = data.CreatedAt
+	return
+}
+
+func (r *Resource) DelMem() {
+	err := memcache.Delete(*r.Access.Context, r.Key.Encode())
+	if err != nil {
+		r.Log("memcache_del", err)
+	}
 }
 
 type Doc []search.Field
@@ -384,13 +391,13 @@ func (d *Doc) Append(o *Doc) {
 func (r *Resource) Index(name string) {
 	index, err := search.Open(name)
 	if err != nil {
-		r.L("index_open", err)
+		r.Log("index_open", err)
 		return
 	}
 
 	_, err = index.Put(*r.Access.Context, r.Key.Encode(), (search.FieldLoadSaver)(r.Doc))
 	if err != nil {
-		r.L("index_put", err)
+		r.Log("index_put", err)
 	}
 
 	return
@@ -406,25 +413,25 @@ func (r *Resource) Document(deep int) {
 		r.Doc = &Doc{}
 	}
 
-	if r.Object == nil {
+	if r.Data == nil {
 		r.Read()
 		if r.HasErrors() {
 			return
 		}
 	}
 
-	r.Object.AddDocument(r)
+	r.Data.Index(r)
 
 	if deep <= 1 {
 		r.Doc.Add(&ChainMeta{
-			Kind:  r.Key.Kind(),
+			Kind:  r.Key.Kind,
 			Owner: OwnerKey(r.Key).Encode(),
 		})
 	}
 
 	if deep > 0 {
-		if r.Key.Parent() != nil {
-			r.Previous = append(r.Previous, r.Key.Parent())
+		if r.Key.Parent != nil {
+			r.Previous = append(r.Previous, r.Key.Parent)
 		}
 		for _, pk := range r.Previous {
 			pr := InitResource(r.Access, pk)
@@ -450,7 +457,7 @@ func (d *Doc) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jd)
 }
 
-// func (r *Resource) MarshalJSON() ([]byte, error) {
+// func (r *Resource) MarshalJSON() ([]byte, Error) {
 // 	type Alias Resource
 // 	return json.Marshal(&struct {
 // 		Path string `json:"path"`
