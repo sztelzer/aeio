@@ -8,7 +8,7 @@ import (
 	"reflect"
 )
 
-//models allow AEIO to instantiate new objects based on keys and paths.
+//models allow aeio to instantiate new objects based on keys and paths.
 var models = make(map[string]Objector)
 
 func RegisterModel(alias string, model Objector) {
@@ -84,7 +84,7 @@ var functions = make(map[string]map[string]struct{})
 
 func RegisterFunction(m string, f string) {
 	if TestFunction(m, f) == nil {
-		panic(fmt.Sprintln("function", f, "is alredy registered on model", m))
+		panic(fmt.Sprintln("function", f, "is already registered on model", m))
 	}
 	if functions[m] == nil {
 		functions[m] = make(map[string]struct{})

@@ -75,13 +75,13 @@ func (r *Resource) Update() {
 		return
 	}
 
-	r.Key, err = r.Access.Datastore.Put(*r.Access.Context, r.Key, r)
+	r.Key, err = DatastoreClient.Put(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
 		r.Error("putting_object", err)
 		return
 	}
 
-	r.SetMem()
+	//r.SetMem()
 
 	r.Data.AfterSave(r)
 
@@ -105,13 +105,13 @@ func (r *Resource) HardSave() {
 		return
 	}
 
-	_, err = r.Access.Datastore.Put(*r.Access.Context, r.Key, r)
+	_, err = DatastoreClient.Put(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
 		r.Error("putting_object", err)
 		return
 	}
 
-	r.SetMem()
+	//r.SetMem()
 
 	r.ExitAction("hardsave")
 }
@@ -142,15 +142,15 @@ func (r *Resource) Read() {
 
 	r.Data.BeforeLoad(r)
 
-	err = r.GetMem()
+	//err = r.GetMem()
+	//if err != nil {
+	err = DatastoreClient.Get(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
-		err = r.Access.Datastore.Get(*r.Access.Context, r.Key, r)
-		if err != nil {
-			r.Error("loading_object: "+Path(r.Key), err)
-			return
-		}
-		r.SetMem()
+		r.Error("loading_object: "+Path(r.Key), err)
+		return
 	}
+	//	r.SetMem()
+	//}
 
 	r.Data.AfterLoad(r)
 	if r.HasErrors() {
@@ -228,14 +228,14 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 	var err error
 
 	//default to 20 results, maximum of 100
-	length := ParseInt(r.Access.Request.FormValue("l"))
-	if length <= 0 {
-		length = DefaultListSize
-	}
-	if length > MaxListSize {
-		length = MaxListSize
-	}
-	q = q.Limit(length)
+	//length := ParseInt(r.Access.Request.FormValue("l"))
+	//if length <= 0 {
+	//	length = ListSizeDefault
+	//}
+	//if length > ListSizeMax {
+	//	length = ListSizeMax
+	//}
+	q = q.Limit(ListSizeDefault)
 
 	// if there is a Next cursor use it
 	var cursor datastore.Cursor
@@ -249,21 +249,21 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 		q = q.Start(cursor)
 	}
 
-	ascend := r.Access.Request.FormValue("a")
-	if ascend != "" {
-		q = q.Order(ascend)
+	orderAscend := r.Access.Request.FormValue("a")
+	if orderAscend != "" {
+		q = q.Order(orderAscend)
 	}
 
-	descend := r.Access.Request.FormValue("z")
-	if descend != "" {
-		q = q.Order("-" + descend)
+	orderDescend := r.Access.Request.FormValue("z")
+	if orderDescend != "" {
+		q = q.Order("-" + orderDescend)
 	}
 
 	//init a counter
 	i := 0
 
 	// finally, run!
-	t := r.Access.Datastore.Run(*r.Access.Context, q)
+	t := DatastoreClient.Run(r.Access.Request.Context(), q)
 	for {
 		nr := new(Resource)
 		nr.Access = r.Access
@@ -307,10 +307,10 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 		nr.Data.AfterLoad(nr)
 
 		//if depth is nil, 0 or false, reset the object after processing.
-		depth := r.Access.Request.FormValue("d")
-		if ParseInt(depth) == 0 {
-			nr.Data = nil
-		}
+		//depth := r.Access.Request.FormValue("d")
+		//if ParseInt(depth) == 0 {
+		//	nr.Data = nil
+		//}
 
 		r.Resources = append(r.Resources, nr)
 	}
@@ -334,12 +334,12 @@ func (r *Resource) Delete() {
 		return
 	}
 
-	err = r.Access.Datastore.Delete(*r.Access.Context, r.Key)
+	err = DatastoreClient.Delete(r.Access.Request.Context(), r.Key)
 	if err != nil {
 		r.Error("delete", err)
 	}
 
-	r.DelMem()
+	//r.DelMem()
 
 	r.ExitAction("delete")
 

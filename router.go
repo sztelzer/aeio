@@ -10,8 +10,9 @@ import (
 var ServerHost string = "localhost"
 var ServerPort string = "8080"
 
-
 func Serve(router http.Handler) {
+	defer ShutdownContext()
+
 	if p := os.Getenv("PORT"); p != "" {
 		ServerPort = p
 		ServerHost = ""
@@ -21,4 +22,3 @@ func Serve(router http.Handler) {
 	log.Printf("Serving HTTP on port %s", ServerPort)
 	log.Fatal(http.ListenAndServe(connectionString, router))
 }
-

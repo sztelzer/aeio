@@ -3,7 +3,7 @@ package aeio
 import (
 	"errors"
 	"fmt"
-	"google.golang.org/appengine/log"
+	"log"
 	"runtime"
 )
 
@@ -15,7 +15,7 @@ type Error struct {
 func (r *Resource) Error(reference string, info interface{}) {
 	_, file, line, _ := runtime.Caller(1)
 	err := fmt.Sprintf("%v - %v:%v", info, file, line)
-	log.Errorf(*r.Access.Context, "%v: %+v", reference, err)
+	log.Printf("%v: %+v", reference, err)
 	r.Errors = append(r.Errors, Error{Reference: reference, Error: err})
 	r.ErrorAction()
 }
@@ -23,14 +23,14 @@ func (r *Resource) Error(reference string, info interface{}) {
 func (r *Resource) ErrorFirst(reference string, info interface{}) {
 	_, file, line, _ := runtime.Caller(1)
 	err := fmt.Sprintf("%v - %v:%v", info, file, line)
-	log.Errorf(*r.Access.Context, "%v: %+v", reference, err)
+	log.Printf("%v: %+v", reference, err)
 	r.Errors = append([]Error{{Reference: reference, Error: err}}, r.Errors...)
 	r.ErrorAction()
 }
 
 func (r *Resource) Log(reference string, info interface{}) {
 	err := fmt.Sprintf("%+v", info)
-	log.Infof(*r.Access.Context, "%v: %+v", reference, err)
+	log.Printf("%v: %+v", reference, err)
 }
 
 func (r *Resource) HasErrors() bool {

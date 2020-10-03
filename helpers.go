@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"golang.org/x/crypto/pbkdf2"
+	"log"
 	"math"
 	mathRand "math/rand"
 	"net/http"
@@ -16,18 +17,22 @@ import (
 	"time"
 )
 
-
 func Forbid(r *Resource) {
 	// var m runtime.MemStats
 	// runtime.ReadMemStats(&m)
 	// r.Log("memory", errors.New(fmt.Sprintf("Memory usage: %d bytes (%d system).", m.Alloc, m.Sys)))
 
+
 	r.Access.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 
 	if len(r.Errors) > 0 && r.Errors[0].Reference == "not_authorized" {
 		r.Access.Writer.WriteHeader(http.StatusUnauthorized)
+
+		log.Printf("%d %s\t%s", http.StatusUnauthorized, r.Access.Request.Method, r.Access.Request.URL.Path)
+
 	} else {
 		r.Access.Writer.WriteHeader(http.StatusForbidden)
+		log.Printf("%d %s\t%s", http.StatusForbidden, r.Access.Request.Method, r.Access.Request.URL.Path)
 	}
 
 	j, _ := json.Marshal(r)
@@ -41,6 +46,7 @@ func Allow(r *Resource) {
 
 	r.Access.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	r.Access.Writer.WriteHeader(http.StatusOK)
+	log.Printf("%d %s\t%s", http.StatusOK, r.Access.Request.Method, r.Access.Request.URL.Path)
 	j, _ := json.Marshal(r)
 	r.Access.Writer.Write(j)
 }
@@ -54,8 +60,11 @@ func Neglect(r *Resource) {
 
 	if len(r.Errors) > 0 && r.Errors[0].Reference == "not_authorized" {
 		r.Access.Writer.WriteHeader(http.StatusNotFound)
+		log.Printf("%d %s\t%s", http.StatusNotFound, r.Access.Request.Method, r.Access.Request.URL.Path)
+
 	} else {
 		r.Access.Writer.WriteHeader(http.StatusNotFound)
+		log.Printf("%d %s\t%s", http.StatusNotFound, r.Access.Request.Method, r.Access.Request.URL.Path)
 	}
 
 	j, _ := json.Marshal(r)
@@ -95,7 +104,7 @@ func NoZeroTime(t time.Time) time.Time {
 	return t
 }
 
-var ValidPath = regexp.MustCompile(`^(?:\/[a-z]+\/[0-9]+)+(\/[a-z]+)?$`)
+var ValidPath = regexp.MustCompile(`^(?:/[a-z]+/[0-9]+)*(/[a-z]+)?$`)
 
 // Timing is used to time the processing of resources.
 func (r *Resource) Timing(s time.Time) {
