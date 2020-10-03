@@ -1,56 +1,56 @@
 package aeio
 
 import (
+	"cloud.google.com/go/datastore"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"reflect"
-
-	"google.golang.org/appengine/datastore"
-	// "google.golang.org/appengine/log"
-	"encoding/gob"
 )
 
-//models are the backbone of AEIO. They allow AEIO to instantiate new objects.
-var models = make(map[string]interface{})
+//models allow aeio to instantiate new objects based on keys and paths.
+var models = make(map[string]Objector)
 
-func RegisterModel(m string, o interface{}) {
-	if _, dup := models[m]; dup {
-		panic("aeio: Register called twice for model " + m)
+func RegisterModel(alias string, model Objector) {
+	if _, ok := models[alias]; ok {
+		panic("aeio: Register called twice for model " + alias)
 	}
-	gob.Register(o)
-	models[m] = o
+	gob.Register(model)
+	models[alias] = model
 }
 
-func NewObject(m string) (Object, error) {
-	if models[m] == nil {
-		return nil, errors.New("Resource " + m + " is not implemented.")
+func NewObject(alias string) (Objector, error) {
+	if models[alias] == nil {
+		return nil, errors.New("Resource " + alias + " is not implemented.")
 	}
-	val := reflect.ValueOf(models[m])
+	val := reflect.ValueOf(models[alias])
 	if val.Kind() == reflect.Ptr {
 		val = reflect.Indirect(val)
 	}
-	new := reflect.New(val.Type()).Interface().(Object)
-	return new, nil
+	newObj := reflect.New(val.Type()).Interface().(Objector)
+
+	return newObj, nil
 }
 
 // children allowed to specific models.
 // register them in the init of models, after all models have been registered.
 var children = make(map[string]map[string]struct{})
 
-func RegisterChild(p string, c string) {
-	if p != "" && models[p] == nil {
-		panic(fmt.Sprintln("parent model", p, "is not registered"))
+func RegisterChild(parent string, child string) {
+	if parent != "" && models[parent] == nil {
+		panic(fmt.Sprintln("parent model", parent, "is not registered or defined"))
 	}
-	if c == "" || models[c] == nil {
-		panic(fmt.Sprintln("model", c, "is not registered"))
+	if child == "" || models[child] == nil {
+		panic(fmt.Sprintln("model", child, "is not registered or defined"))
 	}
-	if children[p] == nil {
-		children[p] = make(map[string]struct{})
+	if children[parent] == nil {
+		children[parent] = make(map[string]struct{})
 	}
-	children[p][c] = struct{}{}
+	children[parent][child] = struct{}{}
 }
 
-func TestPaternity(p string, c string) (err error) {
+// ValidatePaternity simply verifies that the parent key can have this kind of child.
+func ValidatePaternity(p string, c string) (err error) {
 	_, ok := children[p][c]
 	if !ok {
 		err = errors.New("[" + p + "] kind doesn't accept the paternity of [" + c + "] kids. You should register it first.")
@@ -58,19 +58,19 @@ func TestPaternity(p string, c string) (err error) {
 	return
 }
 
-func TestKeyChainPaternity(k *datastore.Key) (err error) {
+func ValidatePaternityChain(k *datastore.Key) (err error) {
 	for {
-		kind := k.Kind()
-		if k.Parent() != nil {
-			k = k.Parent()
-			err = TestPaternity(k.Kind(), kind)
+		kind := k.Kind
+		if k.Parent != nil {
+			k = k.Parent
+			err = ValidatePaternity(k.Kind, kind)
 			if err != nil {
 				return
 			}
 			continue
 		}
 		//no more parent, test for ""
-		err = TestPaternity("", k.Kind())
+		err = ValidatePaternity("", k.Kind)
 		if err != nil {
 			return
 		}
@@ -84,7 +84,7 @@ var functions = make(map[string]map[string]struct{})
 
 func RegisterFunction(m string, f string) {
 	if TestFunction(m, f) == nil {
-		panic(fmt.Sprintln("function", f, "is alredy registered on model", m))
+		panic(fmt.Sprintln("function", f, "is already registered on model", m))
 	}
 	if functions[m] == nil {
 		functions[m] = make(map[string]struct{})
