@@ -8,10 +8,10 @@ import (
 	"reflect"
 )
 
-//models allow aeio to instantiate new objects based on keys and paths.
-var models = make(map[string]Objector)
+// models allow aeio to instantiate new objects based on keys and paths.
+var models = make(map[string]Data)
 
-func RegisterModel(alias string, model Objector) {
+func RegisterModel(alias string, model Data) {
 	if _, ok := models[alias]; ok {
 		panic("aeio: Register called twice for model " + alias)
 	}
@@ -19,7 +19,7 @@ func RegisterModel(alias string, model Objector) {
 	models[alias] = model
 }
 
-func NewObject(alias string) (Objector, error) {
+func NewObject(alias string) (Data, error) {
 	if models[alias] == nil {
 		return nil, errors.New("Resource " + alias + " is not implemented.")
 	}
@@ -27,7 +27,7 @@ func NewObject(alias string) (Objector, error) {
 	if val.Kind() == reflect.Ptr {
 		val = reflect.Indirect(val)
 	}
-	newObj := reflect.New(val.Type()).Interface().(Objector)
+	newObj := reflect.New(val.Type()).Interface().(Data)
 
 	return newObj, nil
 }
@@ -58,7 +58,8 @@ func ValidatePaternity(p string, c string) (err error) {
 	return
 }
 
-func ValidatePaternityChain(k *datastore.Key) (err error) {
+// ValidateKey checks if the key chain is valid
+func ValidateKey(k *datastore.Key) (err error) {
 	for {
 		kind := k.Kind
 		if k.Parent != nil {
@@ -69,7 +70,7 @@ func ValidatePaternityChain(k *datastore.Key) (err error) {
 			}
 			continue
 		}
-		//no more parent, test for ""
+		// no more parent, test for ""
 		err = ValidatePaternity("", k.Kind)
 		if err != nil {
 			return

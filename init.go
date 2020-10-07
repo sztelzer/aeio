@@ -6,8 +6,8 @@ import (
 	"log"
 )
 
-var ListSizeDefault int = 20
-var ListSizeMax int = 100
+var ListSizeDefault = 20
+var ListSizeMax = 100
 var InstanceContext context.Context
 var ShutdownContext context.CancelFunc
 var DatastoreClient *datastore.Client

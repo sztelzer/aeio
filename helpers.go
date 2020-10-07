@@ -17,63 +17,49 @@ import (
 	"time"
 )
 
-func Forbid(r *Resource) {
-	// var m runtime.MemStats
-	// runtime.ReadMemStats(&m)
-	// r.Log("memory", errors.New(fmt.Sprintf("Memory usage: %d bytes (%d system).", m.Alloc, m.Sys)))
+// Respond writes to the resource writer with the selected status and headers. After calling Respond, the connection
+// will be closed, and so it's context. Any process on the request stack may continue after it, but any process using
+// the request.Context will be finished.
+//
+// If the passed status is not http valid, it will be responded http.StatusInternalServerError (500) and the resource will be
+// receive the error reference "invalid_status".
+//
+// If the resource errors contains the reference "not_authorized", the status will be http.StatusForbidden (403) independently
+// of the status passed to Respond.
+func (r *Resource) Respond() error {
+	var err error
 
+	var status int = http.StatusOK
 
-	r.Access.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-
-	if len(r.Errors) > 0 && r.Errors[0].Reference == "not_authorized" {
-		r.Access.Writer.WriteHeader(http.StatusUnauthorized)
-
-		log.Printf("%d %s\t%s", http.StatusUnauthorized, r.Access.Request.Method, r.Access.Request.URL.Path)
-
-	} else {
-		r.Access.Writer.WriteHeader(http.StatusForbidden)
-		log.Printf("%d %s\t%s", http.StatusForbidden, r.Access.Request.Method, r.Access.Request.URL.Path)
+	if r.Error != nil {
+		status = r.Error.(Error).HttpStatus
+		if http.StatusText(status) == "" {
+			return NewError("invalid_status", nil, http.StatusInternalServerError)
+		}
 	}
 
-	j, _ := json.Marshal(r)
-	r.Access.Writer.Write(j)
-}
-
-func Allow(r *Resource) {
-	// var m runtime.MemStats
-	// runtime.ReadMemStats(&m)
-	// r.Log("memory", errors.New(fmt.Sprintf("Memory usage: %d bytes (%d system).", m.Alloc, m.Sys)))
-
-	r.Access.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	r.Access.Writer.WriteHeader(http.StatusOK)
-	log.Printf("%d %s\t%s", http.StatusOK, r.Access.Request.Method, r.Access.Request.URL.Path)
-	j, _ := json.Marshal(r)
-	r.Access.Writer.Write(j)
-}
-
-func Neglect(r *Resource) {
-	// var m runtime.MemStats
-	// runtime.ReadMemStats(&m)
-	// r.Log("memory", errors.New(fmt.Sprintf("Memory usage: %d bytes (%d system).", m.Alloc, m.Sys)))
 
 	r.Access.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 
-	if len(r.Errors) > 0 && r.Errors[0].Reference == "not_authorized" {
-		r.Access.Writer.WriteHeader(http.StatusNotFound)
-		log.Printf("%d %s\t%s", http.StatusNotFound, r.Access.Request.Method, r.Access.Request.URL.Path)
+	r.Access.Writer.WriteHeader(status)
+	log.Printf("%d %s\t%s", status, r.Access.Request.Method, r.Access.Request.URL.Path)
 
-	} else {
-		r.Access.Writer.WriteHeader(http.StatusNotFound)
-		log.Printf("%d %s\t%s", http.StatusNotFound, r.Access.Request.Method, r.Access.Request.URL.Path)
+	j, err := json.Marshal(r)
+	if err != nil {
+		return NewError("marshaling_response", err, http.StatusInternalServerError)
 	}
 
-	j, _ := json.Marshal(r)
-	r.Access.Writer.Write(j)
+	_, err = r.Access.Writer.Write(j)
+	if err != nil {
+		return NewError("writing_response", err, http.StatusInternalServerError)
+	}
+	return nil
 }
 
-// AncestorKey returns the key of the nearest specified kind ancestor for any given key.
-// If there is no ancestors, it checks if itself is the kind and return itself.
-func AncestorKey(k *datastore.Key, kind string) (key *datastore.Key) {
+// AncestorKindKey returns the key of the nearest specified kind ancestor for any given key.
+// Only if there is no ancestors, it checks if itself is the kind and return itself.
+// If there is no element of the kind, returns nil.
+func AncestorKindKey(k *datastore.Key, kind string) *datastore.Key {
 	for {
 		if k.Parent != nil {
 			k = k.Parent
@@ -84,11 +70,14 @@ func AncestorKey(k *datastore.Key, kind string) (key *datastore.Key) {
 		}
 		if k.Kind == kind {
 			return k
+		} else {
+			return nil
 		}
 	}
 }
 
-func OwnerKey(k *datastore.Key) (key *datastore.Key) {
+// RootKey returns the deepest ancestor of the passed key.
+func RootKey(k *datastore.Key) (key *datastore.Key) {
 	for {
 		if k.Parent == nil {
 			return k
@@ -97,21 +86,22 @@ func OwnerKey(k *datastore.Key) (key *datastore.Key) {
 	}
 }
 
+// NoZeroTime checks if time is zero, and if so, returns the actual time.
 func NoZeroTime(t time.Time) time.Time {
 	if t.IsZero() {
-		t = time.Now().Local()
+		return time.Now().UTC()
 	}
 	return t
 }
 
-var ValidPath = regexp.MustCompile(`^(?:/[a-z]+/[0-9]+)*(/[a-z]+)?$`)
+var validPath = regexp.MustCompile(`^(?:/[a-z]+/[0-9]+)*(/[a-z]+)?$`)
 
 // Timing is used to time the processing of resources.
-func (r *Resource) Timing(s time.Time) {
-	r.Time = int64(time.Since(s) / time.Millisecond)
+func (r *Resource) Timing(start time.Time) {
+	r.TimeElapsed = int64(time.Since(start) / time.Millisecond)
 }
 
-//TODO: revision of all helpers.go functions, maybe should return errors also
+// String TODO: revision of all helpers.go functions, maybe should return errors also
 func String(v interface{}) (s string) {
 	switch v := v.(type) {
 	case float32:
@@ -137,7 +127,7 @@ func String(v interface{}) (s string) {
 	case uint32:
 		s = strconv.FormatUint(uint64(v), 10)
 	case uint64:
-		s = strconv.FormatUint(uint64(v), 10)
+		s = strconv.FormatUint(v, 10)
 	default:
 		s = ""
 	}

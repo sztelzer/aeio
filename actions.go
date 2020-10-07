@@ -3,197 +3,137 @@ package aeio
 import (
 	"cloud.google.com/go/datastore"
 	"google.golang.org/api/iterator"
-	"time"
+	"net/http"
 )
 
 // Create is responsible for creating the resource in the datastore. Thus, it registers the new Key.
 // After returning the new resource Key, it empties the sub-object and reload the full data from the datastore.
 // This assures that any 'after load method' is processed.
 // It also calls the object.AfterLoad() method.
-func (r *Resource) Create(skipCheckAncestors bool) {
-	// start := time.Now()
-	// defer r.Timing(start)
-	// defer runtime.GC()
+func (r *Resource) Create() error {
+	var err error
 	r.EnterAction("create")
-	if r.HasErrors() {
-		return
-	}
+	defer r.ExitAction("create")
 
-	if err := ValidatePaternityChain(r.Key); err != nil {
-		r.Error("invalid_path", err)
-		return
-	}
-
-	if !skipCheckAncestors {
-		r.CheckAncestryExistence()
-		if r.HasErrors() {
-			return
-		}
+	err = r.CheckAncestors()
+	if err != nil {
+		return err
 	}
 
 	// if it already have an object, don't bind
 	if r.Data == nil {
-		r.ObjectFromRequest()
-		if r.HasErrors() {
-			return
+		err = r.BindData()
+		if err != nil {
+			return err
 		}
 	}
 
-	r.Update()
-	if r.HasErrors() {
-		return
+	err = r.Update()
+	if err != nil {
+		return err
 	}
 
-	r.Data.BeforeLoad(r)
-	if r.HasErrors() {
-		return
+	err = r.Data.BeforeLoad(r)
+	if err != nil {
+		return err
 	}
 
-	r.Data.AfterLoad(r)
-	r.ExitAction("create")
+	err = r.Data.AfterLoad(r)
+	return err
 }
 
 // Update saves, but can also create the new item..
-func (r *Resource) Update() {
+func (r *Resource) Update() error {
 	var err error
-	// start := time.Now()
-	// defer r.Timing(start)
-	// defer runtime.GC()
 	r.EnterAction("update")
+	defer r.ExitAction("update")
 
-	if r.HasErrors() {
-		return
-	}
-
-	if r.Data == nil {
-		r.Error("nothing_to_save", err)
-		return
-	}
-
-	r.Data.BeforeSave(r)
-	if r.HasErrors() {
-		return
+	err = r.Data.BeforeSave(r)
+	if err != nil {
+		return err
 	}
 
 	r.Key, err = DatastoreClient.Put(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
-		r.Error("putting_object", err)
-		return
+		return NewError("datastore", err, http.StatusInternalServerError)
 	}
 
-	//r.SetMem()
-
-	r.Data.AfterSave(r)
-
-	r.ExitAction("update")
+	err = r.Data.AfterSave(r)
+	return err
 }
 
 // HardSave is an action that just saves the object back. It doesn't process any before/after object methods.
-func (r *Resource) HardSave() {
+func (r *Resource) HardSave() error {
 	var err error
-	// start := time.Now()
-	// defer r.Timing(start)
-	// defer runtime.GC()
 	r.EnterAction("hardsave")
-
-	if r.HasErrors() {
-		return
-	}
+	defer r.ExitAction("hardsave")
 
 	if r.Data == nil {
-		r.Error("no_object_to_save", err)
-		return
+		return NewError("no_data_to_save", nil, http.StatusBadRequest)
 	}
 
 	_, err = DatastoreClient.Put(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
-		r.Error("putting_object", err)
-		return
+		return NewError("datastore", err, http.StatusInternalServerError)
 	}
-
-	//r.SetMem()
-
-	r.ExitAction("hardsave")
+	return nil
 }
 
 // Read is an action that reads a resource from datastore. It always replace the object present with a new one of the right kind.
-func (r *Resource) Read() {
+func (r *Resource) Read() error {
 	var err error
-	start := time.Now()
-	defer r.Timing(start)
-	// defer runtime.GC()
-
 	r.EnterAction("read")
+	defer r.ExitAction("read")
 
-	if r.HasErrors() {
-		return
-	}
 
 	if r.Key == nil {
-		r.Error("invalid_path", nil)
-		return
+		return NewError("invalid_key", nil, http.StatusBadRequest)
 	}
 
 	r.Data, err = NewObject(r.Key.Kind)
 	if err != nil {
-		r.Error("initializing_object", err)
-		return
+		return err
 	}
 
-	r.Data.BeforeLoad(r)
+	err = r.Data.BeforeLoad(r)
+	if err != nil {
+		return err
+	}
 
-	//err = r.GetMem()
-	//if err != nil {
 	err = DatastoreClient.Get(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
-		r.Error("loading_object: "+Path(r.Key), err)
-		return
+		return NewError("loading_data", err, http.StatusNotFound)
 	}
-	//	r.SetMem()
-	//}
 
-	r.Data.AfterLoad(r)
-	if r.HasErrors() {
-		return
-	}
-	r.ExitAction("read")
+	err = r.Data.AfterLoad(r)
+	return err
 }
 
 // Patch is an action for a special case: it always loads the original object and adjusts only the fields that come from the request.
-func (r *Resource) Patch() {
-	// var Error Error
-	// start := time.Now()
-	// defer r.Timing(start)
-	// defer runtime.GC()
+func (r *Resource) Patch() error {
+	var err error
 	r.EnterAction("patch")
+	defer r.ExitAction("patch")
 
-	if r.HasErrors() {
-		return
+	err = r.Read()
+	if err != nil {
+		return err
 	}
 
-	r.Read()
-
-	if r.HasErrors() {
-		return
-	}
-
-	r.ObjectFromRequest()
-	if r.HasErrors() {
+	err = r.BindData()
+	if err != nil {
 		r.Data = nil
-		return
+		return err
 	}
 
-	r.Update()
-
-	r.ExitAction("patch")
+	err = r.Update()
+	return err
 }
 
-func (r *Resource) ReadAll() {
-	// start := time.Now()
-	// defer r.Timing(start)
-	// defer runtime.GC()
-	// r.Action = "readall"
+func (r *Resource) ReadAll() error {
+	var err error
 	r.EnterAction("readall")
+	defer r.ExitAction("readall")
 
 	var q *datastore.Query
 	if r.Key.Parent != nil {
@@ -201,41 +141,46 @@ func (r *Resource) ReadAll() {
 	} else {
 		q = datastore.NewQuery(r.Key.Kind)
 	}
-	r.RunListQuery(q)
-
-	r.ExitAction("readall")
+	err = r.RunListQuery(q)
+	return err
 }
 
-func (r *Resource) ReadAny() {
-	// start := time.Now()
-	// defer r.Timing(start)
-	// defer runtime.GC()
+func (r *Resource) ReadAny() error {
 	r.EnterAction("readany")
+	defer r.ExitAction("readany")
 
 	var q *datastore.Query
 	if r.Key.Parent != nil {
 		q = datastore.NewQuery(r.Key.Kind).Ancestor(r.Key.Parent)
 	} else {
-		//this handles getting everything, including roots.
+		// this handles getting everything, including roots.
 		q = datastore.NewQuery(r.Key.Kind)
 	}
-	r.RunListQuery(q)
-
-	r.ExitAction("readany")
+	err := r.RunListQuery(q)
+	return err
 }
 
-func (r *Resource) RunListQuery(q *datastore.Query) {
+func (r *Resource) RunListQuery(q *datastore.Query) error {
 	var err error
 
-	//default to 20 results, maximum of 100
-	//length := ParseInt(r.Access.Request.FormValue("l"))
-	//if length <= 0 {
-	//	length = ListSizeDefault
-	//}
-	//if length > ListSizeMax {
-	//	length = ListSizeMax
-	//}
-	q = q.Limit(ListSizeDefault)
+	var lengths []int
+	var length int = 0
+	lengths = append(lengths, ParseInt(r.Access.Request.FormValue("length")))
+	lengths = append(lengths, ParseInt(r.Access.Request.FormValue("len")))
+	lengths = append(lengths, ParseInt(r.Access.Request.FormValue("l")))
+	for _, v := range lengths {
+		if length > v {
+			length = v
+		}
+	}
+
+	if length <= 0 {
+		length = ListSizeDefault
+	}
+	if length > ListSizeMax {
+		length = ListSizeMax
+	}
+	q = q.Limit(length)
 
 	// if there is a Next cursor use it
 	var cursor datastore.Cursor
@@ -243,8 +188,7 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 	if next != "" {
 		cursor, err = datastore.DecodeCursor(next)
 		if err != nil {
-			r.Error("invalid_cursor", err)
-			return
+			return NewError("invalid_cursor", err, http.StatusBadRequest)
 		}
 		q = q.Start(cursor)
 	}
@@ -259,7 +203,7 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 		q = q.Order("-" + orderDescend)
 	}
 
-	//init a counter
+	// init a counter
 	i := 0
 
 	// finally, run!
@@ -267,80 +211,68 @@ func (r *Resource) RunListQuery(q *datastore.Query) {
 	for {
 		nr := new(Resource)
 		nr.Access = r.Access
-		// nr.Action = "read"
 
-		// init the object. it's cheap, just a new(kind) under, and easier than a copy
 		nr.Data, err = NewObject(r.Key.Kind)
 		if err != nil {
-			nr.Error("invalid_kind", err)
+			nr.Error = err
 			continue
 		}
 
-		// r.Log("types", errors.New(fmt.Sprintf("%+v", ObjectsRegistry)))
-		// r.Log("resource", errors.New(fmt.Sprintf("%+v", nr)))
-		//
-		// ooo, Error := NewObject(r.Key.Kind())
-		//
-		// r.Log("kind", errors.New(fmt.Sprintf("%+v", r.Key.Kind())))
-		// r.Log("obj", errors.New(fmt.Sprintf("%+v", ooo)))
-
-		nr.Data.BeforeLoad(nr)
+		err = nr.Data.BeforeLoad(nr)
+		if err != nil {
+			nr.Error = err
+			r.Resources = append(r.Resources, nr)
+			continue
+		}
 
 		nr.Key, err = t.Next(nr)
 		if err == iterator.Done {
-			cc, cerr := t.Cursor()
-			if cerr == nil {
-				r.Next = cc.String()
+			cursor, err = t.Cursor()
+			if err == nil {
+				r.Next = cursor.String()
 			}
 			break
 		}
 		i++
 
-		//if this instance has an Error, save the Error and put it as well, but do not process it more.
+		err = nr.Data.AfterLoad(nr)
 		if err != nil {
-			nr.Error("listed_object_key", err)
-			r.Resources = append(r.Resources, nr)
-			continue
+			nr.Error = err
 		}
 
-		// nr.Count = 1
-		nr.Data.AfterLoad(nr)
-
-		//if depth is nil, 0 or false, reset the object after processing.
-		//depth := r.Access.Request.FormValue("d")
-		//if ParseInt(depth) == 0 {
+		// if depth is nil, 0 or false, reset the object after processing.
+		// depth := r.Access.Request.FormValue("d")
+		// if ParseInt(depth) == 0 {
 		//	nr.Data = nil
-		//}
+		// }
 
 		r.Resources = append(r.Resources, nr)
 	}
 
-	r.Count = i
+	r.ResourcesCount = i
+	return nil
 }
 
-func (r *Resource) Delete() {
+func (r *Resource) Delete() error {
 	var err error
-	// defer runtime.GC()
 	r.EnterAction("delete")
+	defer r.ExitAction("delete")
 
-	r.Read()
-	if r.Errors != nil {
-		return
+	err = r.Read()
+	if err != nil {
+		return err
 	}
 
-	// r.Action = "delete"
-	r.Data.BeforeDelete(r)
-	if r.Errors != nil {
-		return
+	// r.AssertAction = "delete"
+	err = r.Data.BeforeDelete(r)
+	if err != nil {
+		return err
 	}
 
 	err = DatastoreClient.Delete(r.Access.Request.Context(), r.Key)
 	if err != nil {
-		r.Error("delete", err)
+		return NewError("delete", err, http.StatusInternalServerError)
 	}
 
-	//r.DelMem()
-
-	r.ExitAction("delete")
-
+	return nil
 }

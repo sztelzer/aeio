@@ -1,64 +1,30 @@
 package aeio
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"runtime"
 )
 
 type Error struct {
-	Reference string `json:"reference"`
-	Error     string `json:"Error"`
+	Reference  string `json:"reference"`
+	Original   string  `json:"error"`
+	Where      string `json:"file"`
+	HttpStatus int    `json:"-"`
 }
 
-func (r *Resource) Error(reference string, info interface{}) {
+func (e Error) Error() string {
+	return fmt.Sprintf("%s, %s, %s, %d", e.Reference, e.Original, e.Where, e.HttpStatus)
+}
+
+func NewError(reference string, original error, status int) error {
 	_, file, line, _ := runtime.Caller(1)
-	err := fmt.Sprintf("%v - %v:%v", info, file, line)
-	log.Printf("%v: %+v", reference, err)
-	r.Errors = append(r.Errors, Error{Reference: reference, Error: err})
-	r.ErrorAction()
-}
-
-func (r *Resource) ErrorFirst(reference string, info interface{}) {
-	_, file, line, _ := runtime.Caller(1)
-	err := fmt.Sprintf("%v - %v:%v", info, file, line)
-	log.Printf("%v: %+v", reference, err)
-	r.Errors = append([]Error{{Reference: reference, Error: err}}, r.Errors...)
-	r.ErrorAction()
-}
-
-func (r *Resource) Log(reference string, info interface{}) {
-	err := fmt.Sprintf("%+v", info)
-	log.Printf("%v: %+v", reference, err)
-}
-
-func (r *Resource) HasErrors() bool {
-	if len(r.Errors) > 0 {
-		return true
+	err := Error{
+		Reference:  reference,
+		Original:   original.Error(),
+		Where:      fmt.Sprintf("%s:%d", file, line),
+		HttpStatus: status,
 	}
-	return false
-}
-
-func (r *Resource) Ok() bool {
-	return !r.HasErrors()
-}
-
-func (r *Resource) ImportErrors(b *Resource) bool {
-	if b.HasErrors() {
-		r.Errors = append(r.Errors, b.Errors...)
-		return true
-	}
-	return false
-}
-
-func (e *Error) SimpleError() error {
-	return errors.New(fmt.Sprintf("%v: %v", e.Reference, e.Error))
-}
-
-func (r *Resource) OneError() error {
-	if r.HasErrors() {
-		return r.Errors[0].SimpleError()
-	}
-	return nil
+	log.Print(err)
+	return err
 }
