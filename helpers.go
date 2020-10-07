@@ -26,23 +26,29 @@ import (
 //
 // If the resource errors contains the reference "not_authorized", the status will be http.StatusForbidden (403) independently
 // of the status passed to Respond.
-func (r *Resource) Respond() error {
-	var err error
+func (r *Resource) Respond(err error) error {
+	var status = http.StatusOK
 
-	var status int = http.StatusOK
+	if err != nil {
+		switch err.(type) {
+		case Error:
+			break
+		case error:
+			err = NewError("error_without_status", err, http.StatusInternalServerError)
+			break
+		}
 
-	if r.Error != nil {
-		status = r.Error.(Error).HttpStatus
+		r.error = err
+		status = err.(Error).HttpStatus
 		if http.StatusText(status) == "" {
-			return NewError("invalid_status", nil, http.StatusInternalServerError)
+			r.error = NewError("invalid_status", nil, http.StatusInternalServerError)
 		}
 	}
-
 
 	r.Access.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 
 	r.Access.Writer.WriteHeader(status)
-	log.Printf("%d %s\t%s", status, r.Access.Request.Method, r.Access.Request.URL.Path)
+	log.Printf("%d %s %s", status, r.Access.Request.Method, r.Access.Request.URL.Path)
 
 	j, err := json.Marshal(r)
 	if err != nil {

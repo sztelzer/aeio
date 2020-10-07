@@ -214,13 +214,13 @@ func (r *Resource) RunListQuery(q *datastore.Query) error {
 
 		nr.Data, err = NewObject(r.Key.Kind)
 		if err != nil {
-			nr.Error = err
+			nr.error = err
 			continue
 		}
 
 		err = nr.Data.BeforeLoad(nr)
 		if err != nil {
-			nr.Error = err
+			nr.error = err
 			r.Resources = append(r.Resources, nr)
 			continue
 		}
@@ -237,7 +237,7 @@ func (r *Resource) RunListQuery(q *datastore.Query) error {
 
 		err = nr.Data.AfterLoad(nr)
 		if err != nil {
-			nr.Error = err
+			nr.error = err
 		}
 
 		// if depth is nil, 0 or false, reset the object after processing.

@@ -25,7 +25,7 @@ import (
 type Resource struct {
 	Key            *datastore.Key `datastore:"-" json:"-"`
 	Data           Data           `datastore:"-" json:"data,omitempty"`
-	Error          error         `datastore:"-" json:"error"`
+	error          error          `datastore:"-"`
 	CreatedAt      time.Time      `datastore:"-" json:"created_at"`
 	Access         *Access        `datastore:"-" json:"-"`
 	ActionsStack   []string       `datastore:"-" json:"actions"`
@@ -209,9 +209,11 @@ func (r *Resource) MarshalJSON() ([]byte, error) {
 	type Alias Resource
 	return json.Marshal(&struct {
 		Path string `json:"path"`
+		Error error `json:"error"`
 		*Alias
 	}{
 		Path:  Path(r.Key),
+		Error: r.error,
 		Alias: (*Alias)(r),
 	})
 }
