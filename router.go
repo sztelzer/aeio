@@ -10,15 +10,19 @@ import (
 var ServerHost string = "localhost"
 var ServerPort string = "8080"
 
-func Serve(router http.Handler) {
-	defer ShutdownContext()
+func Serve(router http.Handler) error {
+	var err error
 
-	if p := os.Getenv("PORT"); p != "" {
-		ServerPort = p
+	port := os.Getenv("PORT")
+	if port != "" {
+		ServerPort = port
 		ServerHost = ""
 	}
 	connectionString := fmt.Sprintf("%s:%s", ServerHost, ServerPort)
 
-	log.Printf("Serving HTTP on port %s", ServerPort)
-	log.Fatal(http.ListenAndServe(connectionString, router))
+	log.Printf("Serving HTTP on %s", connectionString)
+	err = http.ListenAndServe(connectionString, router)
+	// if listenAndServe is ok, will stay running (blocking)
+	// returns only in error (err will always be true)
+	return err
 }
