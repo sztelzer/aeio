@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	// "google.golang.org/appengine/memcache"
-	// "google.golang.org/appengine/search"
 	"io/ioutil"
 	"log"
 	"net/http"
