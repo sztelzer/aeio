@@ -17,7 +17,15 @@ func init() {
 	InstanceContext, ShutdownContext = context.WithCancel(context.Background())
 	DatastoreClient, err = datastore.NewClient(InstanceContext, datastore.DetectProjectID)
 	if err != nil {
-		defer ShutdownContext()
 		log.Fatal(err)
 	}
+}
+
+func Shutdown() {
+	err := DatastoreClient.Close()
+	if err != nil {
+		log.Print("error_closing_datastore_client:", err)
+	}
+
+	ShutdownContext()
 }
