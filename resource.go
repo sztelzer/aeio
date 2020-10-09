@@ -3,7 +3,6 @@ package aeio
 import (
 	"cloud.google.com/go/datastore"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -46,14 +45,14 @@ type Data interface {
 }
 
 // NewResourceFromRequest initializes a base resource with information from the request.
-func NewResourceFromRequest(writer *http.ResponseWriter, request *http.Request) (r *Resource, err error) {
-	r = &Resource{}
+func NewResourceFromRequest(writer *http.ResponseWriter, request *http.Request) (*Resource, error) {
+	r := &Resource{}
 	r.Access = newAccess(writer, request)
 	r.Key = Key(r.Access.Request.URL.Path)
 	if r.Key == nil {
-		err = NewError("invalid_path", nil, http.StatusBadRequest)
+		return r, errorInvalidKey.withStack()
 	}
-	return
+	return r, nil
 }
 
 // InitResource uses a Key to initialize a specific resource beyond the root resource. The resource returned is ready to be actioned.
@@ -65,26 +64,23 @@ func InitResource(access *Access, key *datastore.Key) (r *Resource) {
 // NewResource is used to create empty children resources. Parent path may be the "" string (root). It returns a resource with an incompleteKey.
 // It initializes an object of type kind.
 // TODO: swap access and parentKey for parentResource
-func NewResource(access *Access, parentKey *datastore.Key, kind string) (r *Resource, err error) {
-	r = &Resource{Access: access}
+func NewResource(access *Access, parentKey *datastore.Key, kind string) (*Resource, error) {
+	r := &Resource{Access: access}
 
-	err = ValidatePaternity(parentKey.Kind, kind)
+	err := ValidatePaternity(parentKey.Kind, kind)
 	if err != nil {
-		err = NewError("invalid_path", err, http.StatusBadRequest)
 		return nil, err
 	}
 
 	r.Key = Key(Path(parentKey) + "/" + kind)
 	if r.Key == nil {
-		err = NewError("invalid_path", nil, http.StatusBadRequest)
-		return nil, err
+		return nil, errorInvalidKey.withStack()
 	}
 	r.Data, err = NewObject(kind)
 	if err != nil {
-		err = NewError("invalid_kind", err, http.StatusBadRequest)
 		return nil, err
 	}
-	return
+	return r, nil
 }
 
 // // NewList return a new resource with the list type added to the key.
@@ -147,6 +143,7 @@ func Key(path string) (k *datastore.Key) {
 			k = datastore.IncompleteKey(kd, k)
 		}
 	}
+	log.Print("seems valid key: ", k)
 	return k
 }
 
@@ -168,7 +165,7 @@ func Path(k *datastore.Key) (p string) {
 
 func (r *Resource) NewData(kind string) error {
 	if models[kind] == nil {
-		return NewError("initializing_data", errors.New("resource "+kind+" is not implemented"), http.StatusBadRequest)
+		return errorResourceModelNotImplemented.withStack()
 	}
 	val := reflect.ValueOf(models[kind])
 	if val.Kind() == reflect.Ptr {
@@ -188,17 +185,17 @@ func (r *Resource) BindData() error {
 	}
 
 	if r.Access.Request.ContentLength < 2 {
-		return NewError("empty_content", nil, http.StatusBadRequest)
+		return errorEmptyRequestBody.withStack()
 	}
 
 	bodyContent, err := ioutil.ReadAll(r.Access.Request.Body)
 	if err != nil {
-		return NewError("reading_body", err, http.StatusInternalServerError)
+		return errorRequestBodyRead.withCause(err).withStack()
 	}
 
 	err = json.Unmarshal(bodyContent, &r.Data)
 	if err != nil {
-		return NewError("json_unmarshalling", err, http.StatusBadRequest)
+		return errorRequestUnmarshal.withCause(err).withStack()
 	}
 	return nil
 }
@@ -206,8 +203,8 @@ func (r *Resource) BindData() error {
 func (r *Resource) MarshalJSON() ([]byte, error) {
 	type Alias Resource
 	return json.Marshal(&struct {
-		Path string `json:"path"`
-		Error error `json:"error"`
+		Path  string `json:"path"`
+		Error error  `json:"error"`
 		*Alias
 	}{
 		Path:  Path(r.Key),
@@ -234,10 +231,11 @@ func (r *Resource) CheckAncestors() error {
 			var c int
 			c, err = DatastoreClient.Count(r.Access.Request.Context(), q)
 			if err != nil {
-				return NewError("datastore_client", err, http.StatusInternalServerError)
+				return errorDatastoreCount.withCause(err).withStack()
 			}
 			if c == 0 {
-				return NewError("ancestor_not_found", errors.New(Path(k)), http.StatusNotFound)
+				err = fmt.Errorf(Path(k))
+				return errorDatastoreAncestorNotFound.withCause(err).withStack()
 			}
 		} else {
 			return nil
@@ -251,7 +249,7 @@ func (r *Resource) CheckAncestors() error {
 // 		if *key != nil {
 // 			return true
 // 		}
-// 		r.Error("invalid_path", *path)
+// 		r.complexError("invalid_path", *path)
 // 		return false
 // 	}
 //
@@ -261,11 +259,11 @@ func (r *Resource) CheckAncestors() error {
 // 			return true
 // 		}
 // 		k := *key
-// 		r.Error("invalid_key", k.String())
+// 		r.complexError("invalid_key", k.String())
 // 		return false
 // 	}
 //
-// 	r.Error("invalid_path", *path)
+// 	r.complexError("invalid_path", *path)
 // 	return false
 // }
 
@@ -278,7 +276,7 @@ func (r *Resource) AssertAction(action string) (ok bool) {
 
 func (r *Resource) EnterAction(action string) {
 	r.ActionsHistory = append(r.ActionsHistory, action)
-	if r.AssertAction("Error") {
+	if r.AssertAction("complexError") {
 		return
 	}
 
@@ -292,7 +290,7 @@ func (r *Resource) EnterAction(action string) {
 }
 
 func (r *Resource) ExitAction(action string) {
-	if r.AssertAction("Error") && action != "Error" {
+	if r.AssertAction("complexError") && action != "complexError" {
 		return
 	}
 
@@ -330,24 +328,24 @@ func (r *Resource) ExitAction(action string) {
 //	}
 //
 //	if r.PreviousAction("create") {
-//		err := memcache.Gob.Add(r.Access.Request.Context(), memItem)
-//		if err != nil {
-//			r.Log("memcache_set", err)
+//		withCause := memcache.Gob.Add(r.Access.Request.Context(), memItem)
+//		if withCause != nil {
+//			r.Log("memcache_set", withCause)
 //		}
 //		return
 //	}
 //
-//	err := memcache.Gob.Set(r.Access.Request.Context(), memItem)
-//	if err != nil {
-//		r.Log("memcache_set", err)
+//	withCause := memcache.Gob.Set(r.Access.Request.Context(), memItem)
+//	if withCause != nil {
+//		r.Log("memcache_set", withCause)
 //	}
 // }
 
-// func (r *Resource) GetMem() (err error) {
+// func (r *Resource) GetMem() (withCause error) {
 //	data := new(resourceGob)
-//	_, err = memcache.Gob.Get(r.Access.Request.Context(), r.Key.Encode(), data)
-//	if err != nil {
-//		r.Log("memcache_get", err)
+//	_, withCause = memcache.Gob.Get(r.Access.Request.Context(), r.Key.Encode(), data)
+//	if withCause != nil {
+//		r.Log("memcache_get", withCause)
 //		return
 //	}
 //	r.Data = data.Object
@@ -356,9 +354,9 @@ func (r *Resource) ExitAction(action string) {
 // }
 
 // func (r *Resource) DelMem() {
-//	err := memcache.Delete(r.Access.Request.Context(), r.Key.Encode())
-//	if err != nil {
-//		r.Log("memcache_del", err)
+//	withCause := memcache.Delete(r.Access.Request.Context(), r.Key.Encode())
+//	if withCause != nil {
+//		r.Log("memcache_del", withCause)
 //	}
 // }
 
@@ -377,14 +375,14 @@ func (r *Resource) ExitAction(action string) {
 // }
 
 // func (d *Doc) Add(o interface{}) {
-//	fl, err := search.SaveStruct(o)
-//	if err != nil {
-//		panic(err)
+//	fl, withCause := search.SaveStruct(o)
+//	if withCause != nil {
+//		panic(withCause)
 //	}
 //
-//	err = (search.FieldLoadSaver)(d).Load(fl, nil)
-//	if err != nil {
-//		panic(err)
+//	withCause = (search.FieldLoadSaver)(d).Load(fl, nil)
+//	if withCause != nil {
+//		panic(withCause)
 //	}
 // }
 
@@ -393,15 +391,15 @@ func (r *Resource) ExitAction(action string) {
 // }
 
 // func (r *Resource) Index(name string) {
-//	index, err := search.Open(name)
-//	if err != nil {
-//		r.Log("index_open", err)
+//	index, withCause := search.Open(name)
+//	if withCause != nil {
+//		r.Log("index_open", withCause)
 //		return
 //	}
 //
-//	_, err = index.Put(r.Access.Request.Context(), r.Key.Encode(), (search.FieldLoadSaver)(r.Doc))
-//	if err != nil {
-//		r.Log("index_put", err)
+//	_, withCause = index.Put(r.Access.Request.Context(), r.Key.Encode(), (search.FieldLoadSaver)(r.Doc))
+//	if withCause != nil {
+//		r.Log("index_put", withCause)
 //	}
 //
 //	return
@@ -461,7 +459,7 @@ func (r *Resource) ExitAction(action string) {
 //	return json.Marshal(jd)
 // }
 
-// func (r *Resource) MarshalJSON() ([]byte, Error) {
+// func (r *Resource) MarshalJSON() ([]byte, complexError) {
 // 	type Alias Resource
 // 	return json.Marshal(&struct {
 // 		Path string `json:"path"`

@@ -7,7 +7,6 @@ import (
 type Access struct {
 	Request *http.Request
 	Writer  http.ResponseWriter
-	//UserMeta  interface{}
 }
 
 func newAccess(writer *http.ResponseWriter, request *http.Request) *Access {

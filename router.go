@@ -23,6 +23,6 @@ func Serve(router http.Handler) error {
 	log.Printf("Serving HTTP on %s", connectionString)
 	err = http.ListenAndServe(connectionString, router)
 	// if listenAndServe is ok, will stay running (blocking)
-	// returns only in error (err will always be true)
+	// returns only in error (withCause will always be true)
 	return err
 }

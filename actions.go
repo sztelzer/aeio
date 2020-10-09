@@ -3,7 +3,6 @@ package aeio
 import (
 	"cloud.google.com/go/datastore"
 	"google.golang.org/api/iterator"
-	"net/http"
 )
 
 // Create is responsible for creating the resource in the datastore. Thus, it registers the new Key.
@@ -14,6 +13,11 @@ func (r *Resource) Create() error {
 	var err error
 	r.EnterAction("create")
 	defer r.ExitAction("create")
+
+	err = ValidateKey(r.Key)
+	if err != nil {
+		return err
+	}
 
 	err = r.CheckAncestors()
 	if err != nil {
@@ -48,6 +52,12 @@ func (r *Resource) Update() error {
 	r.EnterAction("update")
 	defer r.ExitAction("update")
 
+	err = ValidateKey(r.Key)
+	if err != nil {
+		return err
+	}
+
+
 	err = r.Data.BeforeSave(r)
 	if err != nil {
 		return err
@@ -55,7 +65,7 @@ func (r *Resource) Update() error {
 
 	r.Key, err = DatastoreClient.Put(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
-		return NewError("datastore", err, http.StatusInternalServerError)
+		return errorWritingDatastore.withCause(err).withStack()
 	}
 
 	err = r.Data.AfterSave(r)
@@ -68,13 +78,19 @@ func (r *Resource) HardSave() error {
 	r.EnterAction("hardsave")
 	defer r.ExitAction("hardsave")
 
+	err = ValidateKey(r.Key)
+	if err != nil {
+		return err
+	}
+
+
 	if r.Data == nil {
-		return NewError("no_data_to_save", nil, http.StatusBadRequest)
+		return errorWritingDatastoreNoData.withStack()
 	}
 
 	_, err = DatastoreClient.Put(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
-		return NewError("datastore", err, http.StatusInternalServerError)
+		return errorWritingDatastore.withCause(err).withStack()
 	}
 	return nil
 }
@@ -85,9 +101,9 @@ func (r *Resource) Read() error {
 	r.EnterAction("read")
 	defer r.ExitAction("read")
 
-
-	if r.Key == nil {
-		return NewError("invalid_key", nil, http.StatusBadRequest)
+	err = ValidateKey(r.Key)
+	if err != nil {
+		return err
 	}
 
 	r.Data, err = NewObject(r.Key.Kind)
@@ -102,7 +118,7 @@ func (r *Resource) Read() error {
 
 	err = DatastoreClient.Get(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
-		return NewError("loading_data", err, http.StatusNotFound)
+		return errorReadDatastoreEntityNotFound.withCause(err).withStack()
 	}
 
 	err = r.Data.AfterLoad(r)
@@ -135,6 +151,12 @@ func (r *Resource) ReadAll() error {
 	r.EnterAction("readall")
 	defer r.ExitAction("readall")
 
+	err = ValidateKey(r.Key)
+	if err != nil {
+		return err
+	}
+
+
 	var q *datastore.Query
 	if r.Key.Parent != nil {
 		q = datastore.NewQuery(r.Key.Kind).Filter("Parent =", r.Key.Parent)
@@ -146,8 +168,15 @@ func (r *Resource) ReadAll() error {
 }
 
 func (r *Resource) ReadAny() error {
+	var err error
 	r.EnterAction("readany")
 	defer r.ExitAction("readany")
+
+	err = ValidateKey(r.Key)
+	if err != nil {
+		return err
+	}
+
 
 	var q *datastore.Query
 	if r.Key.Parent != nil {
@@ -156,7 +185,7 @@ func (r *Resource) ReadAny() error {
 		// this handles getting everything, including roots.
 		q = datastore.NewQuery(r.Key.Kind)
 	}
-	err := r.RunListQuery(q)
+	err = r.RunListQuery(q)
 	return err
 }
 
@@ -165,9 +194,9 @@ func (r *Resource) RunListQuery(q *datastore.Query) error {
 
 	var lengths []int
 	var length int = 0
-	lengths = append(lengths, ParseInt(r.Access.Request.FormValue("length")))
-	lengths = append(lengths, ParseInt(r.Access.Request.FormValue("len")))
-	lengths = append(lengths, ParseInt(r.Access.Request.FormValue("l")))
+	lengths = append(lengths, parseInt(r.Access.Request.FormValue("length")))
+	lengths = append(lengths, parseInt(r.Access.Request.FormValue("len")))
+	lengths = append(lengths, parseInt(r.Access.Request.FormValue("l")))
 	for _, v := range lengths {
 		if length > v {
 			length = v
@@ -188,7 +217,7 @@ func (r *Resource) RunListQuery(q *datastore.Query) error {
 	if next != "" {
 		cursor, err = datastore.DecodeCursor(next)
 		if err != nil {
-			return NewError("invalid_cursor", err, http.StatusBadRequest)
+			return errorDatastoreInvalidCursor.withCause(err).withStack()
 		}
 		q = q.Start(cursor)
 	}
@@ -240,11 +269,11 @@ func (r *Resource) RunListQuery(q *datastore.Query) error {
 			nr.error = err
 		}
 
-		// if depth is nil, 0 or false, reset the object after processing.
-		// depth := r.Access.Request.FormValue("d")
-		// if ParseInt(depth) == 0 {
-		//	nr.Data = nil
-		// }
+		// if depth is specifically 0, reset the object after processing.
+		depth := r.Access.Request.FormValue("d")
+		if depth == "0" {
+			nr.Data = nil
+		}
 
 		r.Resources = append(r.Resources, nr)
 	}
@@ -271,7 +300,7 @@ func (r *Resource) Delete() error {
 
 	err = DatastoreClient.Delete(r.Access.Request.Context(), r.Key)
 	if err != nil {
-		return NewError("delete", err, http.StatusInternalServerError)
+		return errorDeleteDatastoreEntity.withCause(err).withStack()
 	}
 
 	return nil
