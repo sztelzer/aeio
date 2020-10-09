@@ -21,7 +21,8 @@ func RegisterModel(alias string, model Data) {
 
 func NewObject(alias string) (Data, error) {
 	if models[alias] == nil {
-		return nil, errors.New("Resource " + alias + " is not implemented.")
+		err := errors.New("Resource " + alias + " is not implemented.")
+		return nil, errorResourceModelNotImplemented.withCause(err).withStack().withLog()
 	}
 	val := reflect.ValueOf(models[alias])
 	if val.Kind() == reflect.Ptr {
@@ -50,37 +51,41 @@ func RegisterChild(parent string, child string) {
 }
 
 // ValidatePaternity simply verifies that the parent key can have this kind of child.
-func ValidatePaternity(p string, c string) (err error) {
+func ValidatePaternity(p string, c string) error {
 	_, ok := children[p][c]
 	if !ok {
-		err = errors.New("[" + p + "] kind doesn't accept the paternity of [" + c + "] kids. You should register it first.")
+		err := errors.New("[" + p + "] kind doesn't accept the paternity of [" + c + "] kids. You should register it first.")
+		return errorInvalidResourceChild.withCause(err).withStack()
 	}
-	return
+	return nil
 }
 
 // ValidateKey checks if the key chain is valid
-func ValidateKey(k *datastore.Key) (err error) {
+func ValidateKey(k *datastore.Key) error {
+	if k == nil {
+		return errorInvalidKey.withStack()
+	}
 	for {
 		kind := k.Kind
 		if k.Parent != nil {
 			k = k.Parent
-			err = ValidatePaternity(k.Kind, kind)
+			err := ValidatePaternity(k.Kind, kind)
 			if err != nil {
-				return
+				return err
 			}
 			continue
 		}
 		// no more parent, test for ""
-		err = ValidatePaternity("", k.Kind)
+		err := ValidatePaternity("", k.Kind)
 		if err != nil {
-			return
+			return err
 		}
 		return nil
 	}
 }
 
 // functions allowed to specific models.
-// register the allowed functions with the model, after registering it.
+// register the allowed functions for the model after registering it.
 var functions = make(map[string]map[string]struct{})
 
 func RegisterFunction(m string, f string) {
@@ -96,7 +101,8 @@ func RegisterFunction(m string, f string) {
 func TestFunction(m string, f string) error {
 	_, ok := functions[m][f]
 	if !ok {
-		return errors.New(fmt.Sprintf("%v", "model"+m+"doesn't have the function"+f))
+		err := fmt.Errorf("model %s does not have function %s", m, f)
+		return errorInvalidModelFunction.withCause(err).withStack()
 	}
 	return nil
 }
@@ -119,7 +125,7 @@ var actions = map[string]struct{}{
 func RegisterAction(action string) {
 	_, ok := actions[action]
 	if ok {
-		panic(fmt.Sprintln("action", action, "is already registered"))
+		panic(fmt.Sprintf("action %s is already registered", action))
 	}
 	actions[action] = struct{}{}
 }
@@ -127,6 +133,6 @@ func RegisterAction(action string) {
 func ValidAction(action string) {
 	_, ok := actions[action]
 	if !ok {
-		panic(fmt.Sprintf("%v: %v", "invalid_action", action))
+		panic(fmt.Sprintf("invalid action: %s (action is not registered)", action))
 	}
 }
