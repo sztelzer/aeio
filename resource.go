@@ -143,7 +143,6 @@ func Key(path string) (k *datastore.Key) {
 			k = datastore.IncompleteKey(kd, k)
 		}
 	}
-	log.Print("seems valid key: ", k)
 	return k
 }
 
