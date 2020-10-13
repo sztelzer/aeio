@@ -6,7 +6,6 @@ require (
 	cloud.google.com/go v0.68.0 // indirect
 	cloud.google.com/go/datastore v1.3.0
 	go.opencensus.io v0.22.5 // indirect
-	golang.org/x/crypto v0.0.0-20201002170205-7f63de1d35b0
 	golang.org/x/net v0.0.0-20201006153459-a7d1128ccaa0 // indirect
 	golang.org/x/sys v0.0.0-20201008064518-c1f3e3309c71 // indirect
 	golang.org/x/tools v0.0.0-20201008184944-d01b322e6f06 // indirect
