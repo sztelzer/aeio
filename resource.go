@@ -21,7 +21,7 @@ import (
 // Being incomplete, it can use the request data to build the data and store, giving back the complete key.
 type Resource struct {
 	Key            *datastore.Key `datastore:"-" json:"-"`
-	Data           Data           `datastore:"-" json:"data,omitempty"`
+	Data           interface{}    `datastore:"-" json:"data,omitempty"`
 	error          error          `datastore:"-"`
 	CreatedAt      time.Time      `datastore:"-" json:"created_at"`
 	Access         *Access        `datastore:"-" json:"-"`
@@ -35,12 +35,36 @@ type Resource struct {
 }
 
 // Data interface must be implemented by any model/struct that is to be stored/manipulated.
-type Data interface {
+// type Data interface {
+// BeforeSave(*Resource) error
+// AfterSave(*Resource) error
+// BeforeLoad(*Resource) error
+// AfterLoad(*Resource) error
+// BeforeDelete(*Resource) error
+// AfterDelete(*Resource) error
+// }
+
+type DataBeforeSave interface {
 	BeforeSave(*Resource) error
+}
+
+type DataAfterSave interface {
 	AfterSave(*Resource) error
+}
+
+type DataBeforeLoad interface {
 	BeforeLoad(*Resource) error
+}
+
+type DataAfterLoad interface {
 	AfterLoad(*Resource) error
+}
+
+type DataBeforeDelete interface {
 	BeforeDelete(*Resource) error
+}
+
+type DataAfterDelete interface {
 	AfterDelete(*Resource) error
 }
 
@@ -50,7 +74,7 @@ func NewResourceFromRequest(writer *http.ResponseWriter, request *http.Request) 
 	r.Access = newAccess(writer, request)
 	r.Key = Key(r.Access.Request.URL.Path)
 	if r.Key == nil {
-		return r, errorInvalidKey.withStack()
+		return r, errorInvalidPath.withStack()
 	}
 	return r, nil
 }
@@ -74,7 +98,7 @@ func NewResource(access *Access, parentKey *datastore.Key, kind string) (*Resour
 
 	r.Key = Key(Path(parentKey) + "/" + kind)
 	if r.Key == nil {
-		return nil, errorInvalidKey.withStack()
+		return nil, errorInvalidPath.withStack()
 	}
 	r.Data, err = NewObject(kind)
 	if err != nil {
@@ -96,7 +120,9 @@ func (r *Resource) Save() (ps []datastore.Property, err error) {
 		return nil, err
 	}
 	ps = append(ps, datastore.Property{Name: "CreatedAt", Value: r.CreatedAt})
-	ps = append(ps, datastore.Property{Name: "Parent", Value: r.Key.Parent})
+	if r.Key != nil {
+		ps = append(ps, datastore.Property{Name: "Parent", Value: r.Key.Parent})
+	}
 	return ps, nil
 }
 
@@ -170,11 +196,11 @@ func (r *Resource) NewData(kind string) error {
 	if val.Kind() == reflect.Ptr {
 		val = reflect.Indirect(val)
 	}
-	r.Data = reflect.New(val.Type()).Interface().(Data)
+	r.Data = reflect.New(val.Type()).Interface()
 	return nil
 }
 
-func (r *Resource) BindData() error {
+func (r *Resource) BindRequestData() error {
 	var err error
 	if r.Data == nil {
 		err = r.NewData(r.Key.Kind)
@@ -197,6 +223,19 @@ func (r *Resource) BindData() error {
 		return errorRequestUnmarshal.withCause(err).withStack()
 	}
 	return nil
+}
+
+func (r *Resource) CopyData(dst *Resource) error {
+	var p datastore.PropertyList
+	var err error
+
+	p, err = r.Save()
+	if err != nil {
+		return err
+	}
+
+	err = dst.Load(p)
+	return err
 }
 
 func (r *Resource) MarshalJSON() ([]byte, error) {

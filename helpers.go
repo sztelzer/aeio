@@ -28,7 +28,7 @@ func (r *Resource) Respond(err error) error {
 		case complexError:
 			break
 		case error:
-			err = errorBadCustomError.withCause(err)
+			err = errorUnknown.withCause(err)
 			break
 		}
 
@@ -97,7 +97,6 @@ func NoZeroTime(t time.Time) time.Time {
 	return t
 }
 
-var validPath = regexp.MustCompile(`^(?:/[a-z]+/[0-9]+)*(/[a-z]+)?$`)
 
 // Timing is used to time the processing of resources.
 func (r *Resource) Timing(start time.Time) {

@@ -2,6 +2,7 @@ package aeio
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"runtime"
 )
@@ -20,33 +21,41 @@ const (
 )
 
 var (
-	errorWritingDatastore = &complexError{
+	errorInvalidPath = &complexError{
+		Name: errKey,
+		Desc: "The path used is not valid",
+		Code: http.StatusBadRequest,
+	}
+	errorDatastorePut = &complexError{
 		Name: errDatastore,
-		Desc: "When putting the data object to datastore",
+		Desc: "Could not put to datastore",
 		Code: http.StatusInternalServerError,
 	}
-	errorWritingDatastoreNoData = &complexError{
+	errorDatastoreRead = &complexError{
 		Name: errDatastore,
-		Desc: "No data was found to put to datastore",
-		Code: http.StatusBadRequest,
-	}
-	errorInvalidKey = &complexError{
-		Name: errKey,
-		Desc: "The path used causes an invalid key to be formed",
-		Code: http.StatusBadRequest,
-	}
-	errorReadDatastoreEntityNotFound = &complexError{
-		Name: errDatastore,
-		Desc: "The element was not found in the datastore",
+		Desc: "Could not get from datastore",
 		Code: http.StatusNotFound,
 	}
-	errorDeleteDatastoreEntity = &complexError{
+	errorDatastoreDelete = &complexError{
 		Name: errDatastore,
+		Desc: "Could not delete in datastore",
 		Code: http.StatusInternalServerError,
 	}
 	errorDatastoreCount = &complexError{
 		Name: errDatastore,
 		Code: http.StatusInternalServerError,
+	}
+	errorDatastoreAncestorNotFound = &complexError{
+		Name: errDatastore,
+		Desc: "The ancestor for this key was not found",
+		Hint: "Verify that the path is valid",
+		Code: http.StatusBadRequest,
+	}
+	errorDatastoreInvalidCursor = &complexError{
+		Name: errDatastore,
+		Desc: "The cursor passed on the request is not valid for this datastore",
+		Hint: "Restart the listing pagination to get valid cursors",
+		Code: http.StatusBadRequest,
 	}
 	errorInvalidHttpStatusCode = &complexError{
 		Name: errHttpCode,
@@ -65,11 +74,10 @@ var (
 		Name: errResponse,
 		Code: http.StatusInternalServerError,
 	}
-	errorBadCustomError = &complexError{
+	errorUnknown = &complexError{
 		Name: errUnknown,
 		Code: http.StatusInternalServerError,
 		Desc: "Got some error not well described by the framework",
-		Hint: "Use aeio.NewError to extend simple errors",
 	}
 	errorResourceModelNotImplemented = &complexError{
 		Name: errResource,
@@ -83,12 +91,6 @@ var (
 		Code: http.StatusBadRequest,
 		Hint: "Verify that the path requested has all elements implemented and or registered correctly",
 	}
-	errorInvalidModelFunction = &complexError{
-		Name: errResource,
-		Desc: "Model does not implement this function",
-		Hint: "Check that the function is well registered for the model",
-		Code: http.StatusInternalServerError,
-	}
 	errorEmptyRequestBody = &complexError{
 		Name: errRequest,
 		Desc: "There was no data found on the request body",
@@ -101,27 +103,15 @@ var (
 		Hint: "Verify the presence of invalid characters for utf8",
 		Code: http.StatusBadRequest,
 	}
-	errorDatastoreAncestorNotFound = &complexError{
-		Name: errDatastore,
-		Desc: "The ancestor for this key was not found",
-		Hint: "Verify that the path is valid",
-		Code: http.StatusBadRequest,
-	}
-	errorDatastoreInvalidCursor = &complexError{
-		Name: errDatastore,
-		Desc: "The cursor passed on the request is not valid for this datastore",
-		Hint: "Restart the listing pagination to get valid cursors",
-		Code: http.StatusBadRequest,
-	}
 )
 
 type complexError struct {
 	Name  string `json:"name"`                  // limited error name strings, like codes for mapping
-	Desc  string `json:"description,omitempty"` // improved description of the problem for humans
-	Hint  string `json:"hint,omitempty"`        // if it is a common user mistake try to educate
-	Where string `json:"-"`
+	Desc  string `json:"description"` // improved description of the problem for humans
+	Hint  string `json:"hint"`        // if it is a common user mistake try to educate
+	Where string `json:"stack"`
 	Code  int    `json:"-"`               // http status code caused by this error
-	Debug string `json:"debug,omitempty"` // original error message
+	Debug string `json:"debug"` // original error message
 	cause error  // original error, only added by .withCause()
 }
 
@@ -147,7 +137,12 @@ func (e complexError) withStack() complexError {
 }
 
 func (e complexError) withLog() complexError {
-	// log.Print(e.Error())
+	log.Print(e.Error())
+	return e
+}
+
+func (e complexError) withHint(hint string) complexError {
+	e.Hint = hint
 	return e
 }
 
