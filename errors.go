@@ -74,14 +74,14 @@ var (
 	errorResourceModelNotImplemented = &complexError{
 		Name: errResource,
 		Code: http.StatusBadRequest,
-		Desc: "There is no way to use data of this kind",
-		Hint: "Verify that the path requested is valid, or that the model is registered correctly",
+		Desc: "The path has objects not implemented",
+		Hint: "Verify that the path requested has all elements implemented and or registered correctly",
 	}
 	errorInvalidResourceChild = &complexError{
 		Name: errSchema,
-		Desc: "The path has an invalid hierarchy of objects",
+		Desc: "The path has invalid objects hierarchy",
 		Code: http.StatusBadRequest,
-		Hint: "Verify that the path requested is valid",
+		Hint: "Verify that the path requested has all elements implemented and or registered correctly",
 	}
 	errorInvalidModelFunction = &complexError{
 		Name: errResource,

@@ -37,11 +37,14 @@ func (r *Resource) Respond(err error) error {
 		if http.StatusText(status) == "" {
 			r.error = errorInvalidHttpStatusCode.withCause(err).withStack()
 		}
+
+		log.Printf("%d %s %s %s", status, r.Access.Request.Method, r.Access.Request.URL.Path, err)
 	}
 
 	r.Access.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 
 	r.Access.Writer.WriteHeader(status)
+
 	log.Printf("%d %s %s", status, r.Access.Request.Method, r.Access.Request.URL.Path)
 
 	j, err := json.Marshal(r)
