@@ -23,26 +23,15 @@ type Resource struct {
 	Key            *datastore.Key `datastore:"-" json:"-"`
 	Data           interface{}    `datastore:"-" json:"data,omitempty"`
 	error          error          `datastore:"-"`
-	CreatedAt      time.Time      `datastore:"-" json:"created_at"`
+	CreatedAt      time.Time      `datastore:"-" json:"created_at,omitempty"`
 	Access         *Access        `datastore:"-" json:"-"`
-	ActionsStack   []string       `datastore:"-" json:"actions"`
-	ActionsHistory []string       `datastore:"-" json:"actions_history"`
-	Next           string         `datastore:"-" json:"next"`
-	Resources      []*Resource    `datastore:"-" json:"resources"`
-	ResourcesCount int            `datastore:"-" json:"resources_count"`
-	TimeElapsed    int64          `datastore:"-" json:"time_elapsed"`
-	// Previous       []*datastore.Key `datastore:"-" json:"-"`
+	ActionsStack   []string       `datastore:"-" json:"-"`
+	ActionsHistory []string       `datastore:"-" json:"-"`
+	Resources      []*Resource    `datastore:"-" json:"resources,omitempty"`
+	ResourcesCount int            `datastore:"-" json:"resources_count,omitempty"`
+	Next           string         `datastore:"-" json:"next,omitempty"`
+	TimeElapsed    int64          `datastore:"-" json:"time_elapsed,omitempty"`
 }
-
-// Data interface must be implemented by any model/struct that is to be stored/manipulated.
-// type Data interface {
-// BeforeSave(*Resource) error
-// AfterSave(*Resource) error
-// BeforeLoad(*Resource) error
-// AfterLoad(*Resource) error
-// BeforeDelete(*Resource) error
-// AfterDelete(*Resource) error
-// }
 
 type DataBeforeSave interface {
 	BeforeSave(*Resource) error
