@@ -28,7 +28,7 @@ func (r *Resource) Respond(err error) error {
 		case complexError:
 			break
 		case error:
-			err = errorBadCustomError.withCause(err)
+			err = errorUnknown.withCause(err)
 			break
 		}
 
@@ -37,11 +37,14 @@ func (r *Resource) Respond(err error) error {
 		if http.StatusText(status) == "" {
 			r.error = errorInvalidHttpStatusCode.withCause(err).withStack()
 		}
+
+		log.Printf("%d %s %s %s", status, r.Access.Request.Method, r.Access.Request.URL.Path, err)
 	}
 
 	r.Access.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 
 	r.Access.Writer.WriteHeader(status)
+
 	log.Printf("%d %s %s", status, r.Access.Request.Method, r.Access.Request.URL.Path)
 
 	j, err := json.Marshal(r)
@@ -94,7 +97,6 @@ func NoZeroTime(t time.Time) time.Time {
 	return t
 }
 
-var validPath = regexp.MustCompile(`^(?:/[a-z]+/[0-9]+)*(/[a-z]+)?$`)
 
 // Timing is used to time the processing of resources.
 func (r *Resource) Timing(start time.Time) {

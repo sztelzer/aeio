@@ -6,12 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 )
 
-// models allow aeio to instantiate new objects based on keys and paths.
-var models = make(map[string]Data)
 
-func RegisterModel(alias string, model Data) {
+var validPath = regexp.MustCompile(`^(?:/[a-z]+/[0-9]+)*(/[a-z]+)?$`)
+
+
+// models allow aeio to instantiate new objects based on keys and paths.
+var models = make(map[string]interface{})
+
+func RegisterModel(alias string, model interface{}) {
 	if _, ok := models[alias]; ok {
 		panic("aeio: Register called twice for model " + alias)
 	}
@@ -19,7 +24,7 @@ func RegisterModel(alias string, model Data) {
 	models[alias] = model
 }
 
-func NewObject(alias string) (Data, error) {
+func NewObject(alias string) (interface{}, error) {
 	if models[alias] == nil {
 		err := errors.New("Resource " + alias + " is not implemented.")
 		return nil, errorResourceModelNotImplemented.withCause(err).withStack().withLog()
@@ -28,7 +33,7 @@ func NewObject(alias string) (Data, error) {
 	if val.Kind() == reflect.Ptr {
 		val = reflect.Indirect(val)
 	}
-	newObj := reflect.New(val.Type()).Interface().(Data)
+	newObj := reflect.New(val.Type()).Interface()
 
 	return newObj, nil
 }
@@ -63,19 +68,25 @@ func ValidatePaternity(p string, c string) error {
 // ValidateKey checks if the key chain is valid
 func ValidateKey(k *datastore.Key) error {
 	if k == nil {
-		return errorInvalidKey.withStack()
+		return errorInvalidPath.withStack().withLog()
 	}
+	var level = 0
 	for {
 		kind := k.Kind
+		if level != 0 && k.ID == 0 {
+			return errorInvalidPath.withHint(fmt.Sprintf("key id 0 at level %d", level))
+		}
+
 		if k.Parent != nil {
 			k = k.Parent
 			err := ValidatePaternity(k.Kind, kind)
 			if err != nil {
 				return err
 			}
+			level--
 			continue
 		}
-		// no more parent, test for ""
+		// no more parents, test for root ""
 		err := ValidatePaternity("", k.Kind)
 		if err != nil {
 			return err
@@ -84,7 +95,7 @@ func ValidateKey(k *datastore.Key) error {
 	}
 }
 
-// functions allowed to specific models.
+/*// functions allowed to specific models.
 // register the allowed functions for the model after registering it.
 var functions = make(map[string]map[string]struct{})
 
@@ -106,29 +117,34 @@ func TestFunction(m string, f string) error {
 	}
 	return nil
 }
-
+*/
 // actions maps what is being made with the resource so other parts of the code can be aware and take decisions.
 
+const (
+	actionGet     = "GET"
+	actionList    = "LIST"
+	actionPut     = "PUT"
+	actionDelete  = "DELETE"
+	actionListAny = "LIST_ANY"
+	actionError   = "ERROR"
+)
+
 var actions = map[string]struct{}{
-	"error":    {},
-	"create":   {},
-	"read":     {},
-	"readall":  {},
-	"readany":  {},
-	"update":   {},
-	"save":     {},
-	"hardsave": {},
-	"patch":    {},
-	"delete":   {},
+	actionError:   {},
+	actionGet:     {},
+	actionList:    {},
+	actionListAny: {},
+	actionPut:     {},
+	actionDelete:  {},
 }
 
-func RegisterAction(action string) {
-	_, ok := actions[action]
-	if ok {
-		panic(fmt.Sprintf("action %s is already registered", action))
-	}
-	actions[action] = struct{}{}
-}
+// func RegisterAction(action string) {
+// 	_, ok := actions[action]
+// 	if ok {
+// 		panic(fmt.Sprintf("action %s is already registered", action))
+// 	}
+// 	actions[action] = struct{}{}
+// }
 
 func ValidAction(action string) {
 	_, ok := actions[action]

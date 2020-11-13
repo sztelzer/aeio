@@ -2,104 +2,68 @@ package aeio
 
 import (
 	"cloud.google.com/go/datastore"
+	"fmt"
 	"google.golang.org/api/iterator"
+	"log"
+	"net/http"
+
+	// "google.golang.org/api/iterator"
 )
 
-// Create is responsible for creating the resource in the datastore. Thus, it registers the new Key.
-// After returning the new resource Key, it empties the sub-object and reload the full data from the datastore.
-// This assures that any 'after load method' is processed.
-// It also calls the object.AfterLoad() method.
-func (r *Resource) Create() error {
+// Update saves: create, overwrite completely, or overwrite parts
+func (r *Resource) Put() error {
 	var err error
-	r.EnterAction("create")
-	defer r.ExitAction("create")
+	r.EnterAction(actionPut)
+	defer r.ExitAction(actionPut)
 
 	err = ValidateKey(r.Key)
 	if err != nil {
 		return err
 	}
 
-	err = r.CheckAncestors()
-	if err != nil {
-		return err
-	}
-
-	// if it already have an object, don't bind
-	if r.Data == nil {
-		err = r.BindData()
+	if r.Access.Request.Method == http.MethodPatch {
+		err = r.Get()
 		if err != nil {
 			return err
 		}
 	}
 
-	err = r.Update()
+	err = r.BindRequestData()
 	if err != nil {
 		return err
 	}
 
-	err = r.Data.BeforeLoad(r)
-	if err != nil {
-		return err
-	}
-
-	err = r.Data.AfterLoad(r)
-	return err
-}
-
-// Update saves, but can also create the new item..
-func (r *Resource) Update() error {
-	var err error
-	r.EnterAction("update")
-	defer r.ExitAction("update")
-
-	err = ValidateKey(r.Key)
-	if err != nil {
-		return err
-	}
-
-
-	err = r.Data.BeforeSave(r)
-	if err != nil {
-		return err
+	if data, ok := r.Data.(DataBeforeSave); ok {
+		err := data.BeforeSave(r)
+		if err != nil {
+			return errorUnknown.withCause(err).withStack().withLog()
+		}
 	}
 
 	r.Key, err = DatastoreClient.Put(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
-		return errorWritingDatastore.withCause(err).withStack()
+		return errorDatastorePut.withCause(err).withStack()
 	}
 
-	err = r.Data.AfterSave(r)
+	if data, ok := r.Data.(DataAfterSave); ok {
+		err := data.AfterSave(r)
+		if err != nil {
+			return errorUnknown.withCause(err).withStack().withLog()
+		}
+	}
 	return err
 }
 
-// HardSave is an action that just saves the object back. It doesn't process any before/after object methods.
-func (r *Resource) HardSave() error {
-	var err error
-	r.EnterAction("hardsave")
-	defer r.ExitAction("hardsave")
-
-	err = ValidateKey(r.Key)
-	if err != nil {
-		return err
-	}
-
-
-	if r.Data == nil {
-		return errorWritingDatastoreNoData.withStack()
-	}
-
-	_, err = DatastoreClient.Put(r.Access.Request.Context(), r.Key, r)
-	if err != nil {
-		return errorWritingDatastore.withCause(err).withStack()
-	}
-	return nil
-}
 
 // Read is an action that reads a resource from datastore. It always replace the object present with a new one of the right kind.
-func (r *Resource) Read() error {
+func (r *Resource) Get() error {
 	var err error
-	r.EnterAction("read")
-	defer r.ExitAction("read")
+	r.EnterAction(actionGet)
+	defer r.ExitAction(actionGet)
+
+	if r.Key.Incomplete() {
+		return errorInvalidPath.withHint(fmt.Sprintf("%s", "The key passed to get is incomplete"))
+	}
 
 	err = ValidateKey(r.Key)
 	if err != nil {
@@ -111,109 +75,96 @@ func (r *Resource) Read() error {
 		return err
 	}
 
-	err = r.Data.BeforeLoad(r)
-	if err != nil {
-		return err
+	if data, ok := r.Data.(DataBeforeLoad); ok {
+		err = data.BeforeLoad(r)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = DatastoreClient.Get(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
-		return errorReadDatastoreEntityNotFound.withCause(err).withStack()
+		return errorDatastoreRead.withCause(err)
 	}
 
-	err = r.Data.AfterLoad(r)
+	if data, ok := r.Data.(DataAfterLoad); ok {
+		err = data.AfterLoad(r)
+		if err != nil {
+			return err
+		}
+	}
+
 	return err
 }
 
-// Patch is an action for a special case: it always loads the original object and adjusts only the fields that come from the request.
-func (r *Resource) Patch() error {
+
+func (r *Resource) List() error {
 	var err error
-	r.EnterAction("patch")
-	defer r.ExitAction("patch")
+	r.EnterAction(actionList)
+	defer r.ExitAction(actionList)
 
-	err = r.Read()
-	if err != nil {
-		return err
+	// key must be incomplete
+	if !r.Key.Incomplete() {
+		return errorInvalidPath.withHint("Lists only works under models, not ids: remove the id from the end of path")
 	}
-
-	err = r.BindData()
-	if err != nil {
-		r.Data = nil
-		return err
-	}
-
-	err = r.Update()
-	return err
-}
-
-func (r *Resource) ReadAll() error {
-	var err error
-	r.EnterAction("readall")
-	defer r.ExitAction("readall")
 
 	err = ValidateKey(r.Key)
 	if err != nil {
 		return err
 	}
 
-
-	var q *datastore.Query
+	q := datastore.NewQuery(r.Key.Kind)
 	if r.Key.Parent != nil {
-		q = datastore.NewQuery(r.Key.Kind).Filter("Parent =", r.Key.Parent)
-	} else {
-		q = datastore.NewQuery(r.Key.Kind)
+		q = q.Filter("Parent =", r.Key.Parent)
 	}
+
 	err = r.RunListQuery(q)
+
 	return err
 }
 
-func (r *Resource) ReadAny() error {
+func (r *Resource) ListAny() error {
 	var err error
-	r.EnterAction("readany")
-	defer r.ExitAction("readany")
+	r.EnterAction(actionListAny)
+	defer r.ExitAction(actionListAny)
+
+	// key must be incomplete
+	if !r.Key.Incomplete() {
+		return errorInvalidPath
+	}
 
 	err = ValidateKey(r.Key)
 	if err != nil {
 		return err
 	}
 
+	log.Println(r.Key.String(), r.Key.Kind)
 
-	var q *datastore.Query
+	q := datastore.NewQuery(r.Key.Kind)
 	if r.Key.Parent != nil {
-		q = datastore.NewQuery(r.Key.Kind).Ancestor(r.Key.Parent)
-	} else {
-		// this handles getting everything, including roots.
-		q = datastore.NewQuery(r.Key.Kind)
+		q = q.Ancestor(r.Key.Parent)
 	}
+
 	err = r.RunListQuery(q)
 	return err
 }
+
+const (
+	headerListNext            = "X-List-Next-Cursor"
+	headerListLimit           = "X-List-Limit"
+	headerListPageSize        = "X-List-Page-Size"
+	headerListFieldAscending  = "X-List-Field-Ascending"
+	headerListFieldDescending = "X-List-Field-Descending"
+)
 
 func (r *Resource) RunListQuery(q *datastore.Query) error {
 	var err error
 
-	var lengths []int
-	var length int = 0
-	lengths = append(lengths, parseInt(r.Access.Request.FormValue("length")))
-	lengths = append(lengths, parseInt(r.Access.Request.FormValue("len")))
-	lengths = append(lengths, parseInt(r.Access.Request.FormValue("l")))
-	for _, v := range lengths {
-		if length > v {
-			length = v
-		}
-	}
+	q = q.Limit(ListSizeDefault)
 
-	if length <= 0 {
-		length = ListSizeDefault
-	}
-	if length > ListSizeMax {
-		length = ListSizeMax
-	}
-	q = q.Limit(length)
-
-	// if there is a Next cursor use it
+	// use cursor
 	var cursor datastore.Cursor
-	next := r.Access.Request.FormValue("n")
+	next := r.Access.Request.Header.Get(headerListNext)
 	if next != "" {
 		cursor, err = datastore.DecodeCursor(next)
 		if err != nil {
@@ -222,63 +173,77 @@ func (r *Resource) RunListQuery(q *datastore.Query) error {
 		q = q.Start(cursor)
 	}
 
-	orderAscend := r.Access.Request.FormValue("a")
-	if orderAscend != "" {
-		q = q.Order(orderAscend)
+	if field := r.Access.Request.Header.Get(headerListFieldAscending); field != "" {
+		q = q.Order(field)
 	}
 
-	orderDescend := r.Access.Request.FormValue("z")
-	if orderDescend != "" {
-		q = q.Order("-" + orderDescend)
+	if field := r.Access.Request.Header.Get(headerListFieldDescending); field != "" {
+		q = q.Order("-" + field)
 	}
 
-	// init a counter
-	i := 0
+	// finally, run one page!
+	ite := DatastoreClient.Run(r.Access.Request.Context(), q)
 
-	// finally, run!
-	t := DatastoreClient.Run(r.Access.Request.Context(), q)
-	for {
+	for i := 0; i < ListSizeDefault; i++ {
+
+		// this is the use case of a NewClone() method for r
 		nr := new(Resource)
 		nr.Access = r.Access
-
 		nr.Data, err = NewObject(r.Key.Kind)
 		if err != nil {
-			nr.error = err
-			continue
+			return err
 		}
 
-		err = nr.Data.BeforeLoad(nr)
+		nrTemp := new(Resource)
+		nrTemp.Access = r.Access
+		nrTemp.Data, err = NewObject(r.Key.Kind)
 		if err != nil {
-			nr.error = err
-			r.Resources = append(r.Resources, nr)
-			continue
+			return err
 		}
 
-		nr.Key, err = t.Next(nr)
-		if err == iterator.Done {
-			cursor, err = t.Cursor()
-			if err == nil {
-				r.Next = cursor.String()
-			}
+		var iteErr error
+		nr.Key, iteErr = ite.Next(nrTemp)
+		if iteErr == iterator.Done {
+			r.Next = ""
 			break
-		}
-		i++
-
-		err = nr.Data.AfterLoad(nr)
-		if err != nil {
-			nr.error = err
+		} else if iteErr != nil {
+			log.Println("HERE!!")
+			return errorUnknown.withCause(iteErr).withStack().withLog()
 		}
 
-		// if depth is specifically 0, reset the object after processing.
-		depth := r.Access.Request.FormValue("d")
-		if depth == "0" {
-			nr.Data = nil
+		// TODO: Just for using BeforeLoad we need to copy data two times because of the temp. Check if next and get are equivalent and use only one get.
+		if data, ok := nr.Data.(DataBeforeLoad); ok {
+			err = data.BeforeLoad(nr)
+			if err != nil {
+				if err := nrTemp.CopyData(nr); err != nil {
+					log.Print(err)
+				}
+				r.Resources = append(r.Resources, nr)
+				return errorUnknown.withCause(err).withStack()
+			}
+		}
+
+		if err := nrTemp.CopyData(nr); err != nil {
+			return errorUnknown.withCause(err).withStack()
+		}
+
+		if data, ok := nr.Data.(DataAfterLoad); ok {
+			err = data.AfterLoad(nr)
+			if err != nil {
+				r.Resources = append(r.Resources, nr)
+				return errorUnknown.withCause(err).withStack()
+			}
 		}
 
 		r.Resources = append(r.Resources, nr)
+
+		cursor, err = ite.Cursor()
+		if err == nil {
+			r.Next = cursor.String()
+		}
 	}
 
-	r.ResourcesCount = i
+	r.ResourcesCount = len(r.Resources)
 	return nil
 }
 
@@ -287,21 +252,30 @@ func (r *Resource) Delete() error {
 	r.EnterAction("delete")
 	defer r.ExitAction("delete")
 
-	err = r.Read()
+	err = r.Get()
 	if err != nil {
 		return err
 	}
 
-	// r.AssertAction = "delete"
-	err = r.Data.BeforeDelete(r)
-	if err != nil {
-		return err
+	if data, ok := r.Data.(DataBeforeDelete); ok {
+		err = data.BeforeDelete(r)
+		if err != nil {
+			return errorUnknown.withCause(err).withStack().withLog()
+		}
 	}
 
 	err = DatastoreClient.Delete(r.Access.Request.Context(), r.Key)
 	if err != nil {
-		return errorDeleteDatastoreEntity.withCause(err).withStack()
+		return errorDatastoreDelete.withCause(err).withStack().withLog()
+	}
+
+	if data, ok := r.Data.(DataAfterDelete); ok {
+		err = data.AfterDelete(r)
+		if err != nil {
+			return errorUnknown.withCause(err).withStack().withLog()
+		}
 	}
 
 	return nil
 }
+
