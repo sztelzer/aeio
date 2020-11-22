@@ -56,6 +56,7 @@ func (r *Resource) Put() error {
 
 
 // Read is an action that reads a resource from datastore. It always replace the object present with a new one of the right kind.
+// The resource only need to have a complete key.
 func (r *Resource) Get() error {
 	var err error
 	r.EnterAction(actionGet)

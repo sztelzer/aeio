@@ -2,62 +2,15 @@ package aeio
 
 import (
 	"cloud.google.com/go/datastore"
-	"encoding/json"
 	"log"
 	"math"
 	"net/http"
 	"regexp"
+	"runtime"
 	"strconv"
+	"strings"
 	"time"
 )
-
-// Respond writes to the resource writer with the selected status and headers. After calling Respond, the connection
-// will be closed, and so it's context. Any process on the request stack may continue after it, but any process using
-// the request.Context will be finished.
-//
-// If the passed status is not http valid, it will be responded http.StatusInternalServerError (500) and the resource will be
-// receive the error reference "invalid_status".
-//
-// If the resource errors contains the reference "not_authorized", the status will be http.StatusForbidden (403) independently
-// of the status passed to Respond.
-func (r *Resource) Respond(err error) error {
-	var status = http.StatusOK
-
-	if err != nil {
-		switch err.(type) {
-		case complexError:
-			break
-		case error:
-			err = errorUnknown.withCause(err)
-			break
-		}
-
-		r.error = err
-		status = err.(complexError).Code
-		if http.StatusText(status) == "" {
-			r.error = errorInvalidHttpStatusCode.withCause(err).withStack()
-		}
-
-		log.Printf("%d %s %s %s", status, r.Access.Request.Method, r.Access.Request.URL.Path, err)
-	}
-
-	r.Access.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-
-	r.Access.Writer.WriteHeader(status)
-
-	log.Printf("%d %s %s", status, r.Access.Request.Method, r.Access.Request.URL.Path)
-
-	j, err := json.Marshal(r)
-	if err != nil {
-		return errorResponseMarshal.withCause(err).withStack().withLog()
-	}
-
-	_, err = r.Access.Writer.Write(j)
-	if err != nil {
-		return errorResponseWrite.withCause(err).withStack().withLog()
-	}
-	return nil
-}
 
 // AncestorKindKey returns the key of the nearest specified kind ancestor for any given key.
 // Only if there is no ancestors, it checks if itself is the kind and return itself.
@@ -80,6 +33,7 @@ func AncestorKindKey(k *datastore.Key, kind string) *datastore.Key {
 }
 
 // RootKey returns the deepest ancestor of the passed key.
+// Very useful for checking Users path for example.
 func RootKey(k *datastore.Key) (key *datastore.Key) {
 	for {
 		if k.Parent == nil {
@@ -95,12 +49,6 @@ func NoZeroTime(t time.Time) time.Time {
 		return time.Now().UTC()
 	}
 	return t
-}
-
-
-// Timing is used to time the processing of resources.
-func (r *Resource) Timing(start time.Time) {
-	r.TimeElapsed = int64(time.Since(start) / time.Millisecond)
 }
 
 // // String TODO: revision of all helpers.go functions, maybe should return errors also
@@ -234,3 +182,101 @@ func parseInt(v string) (i int) {
 // 	reg, _ := regexp.Compile("[^A-Za-z]+")
 // 	return reg.ReplaceAllString(s, "")
 // }
+
+
+// NewResourceFromRequest initializes a base resource with information from the request.
+func NewResourceFromRequest(writer *http.ResponseWriter, request *http.Request) (*Resource, error) {
+	r := &Resource{}
+	r.Access = newAccess(writer, request)
+	r.Key = Key(r.Access.Request.URL.Path)
+	if r.Key == nil {
+		return r, errorInvalidPath.withStack()
+	}
+	return r, nil
+}
+
+// InitResource uses a Key to initialize a specific resource beyond the root resource. The resource returned is ready to be actioned.
+// Examples are returning sub resources or even something outside the scope of root.
+// You can pass an incomplete Key to complete when putting the object on the datastore.
+func InitResource(access *Access, key *datastore.Key) (r *Resource) {
+	return &Resource{Key: key, Access: access}
+}
+
+// NewResource is used to create empty children resources. Parent path may be the "" string (root). It returns a resource with an incompleteKey.
+// It initializes an object of type kind.
+// TODO: swap access and parentKey for parentResource
+func NewResource(access *Access, parentKey *datastore.Key, kind string) (*Resource, error) {
+	r := &Resource{Access: access}
+
+	if parentKey == nil {
+		parentKey = datastore.IncompleteKey("", nil)
+	}
+
+	err := ValidatePaternity(parentKey.Kind, kind)
+	if err != nil {
+		return nil, err
+	}
+
+	if parentKey.Kind == "" {
+		r.Key = Key("/" + kind)
+	} else {
+		r.Key = Key(Path(parentKey) + "/" + kind)
+	}
+
+	if r.Key == nil {
+		return nil, errorInvalidPath.withStack()
+	}
+	r.Data, err = NewObject(kind)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// Key transforms a path in a datastore key using an access.
+func Key(path string) (k *datastore.Key) {
+	var kd string
+	var id int64
+	var p []string
+
+	if path == "" {
+		log.Print("path to key from empty path")
+		return nil
+	}
+
+	if validPath.MatchString(path) != true {
+		_, file, line, _ := runtime.Caller(2)
+		log.Println("invalid_regex_path", path, file, line)
+		return nil
+	}
+
+	p = strings.SplitN(path, "/", 2)
+	p = strings.Split(p[1], "/")
+	for i := 0; i < len(p); i = i + 2 {
+		kd = p[i]
+		if i < len(p)-1 {
+			id, _ = strconv.ParseInt(p[i+1], 10, 64)
+			k = datastore.IDKey(kd, id, k)
+		} else {
+			k = datastore.IncompleteKey(kd, k)
+		}
+	}
+	return k
+}
+
+// Path transforms a datastore Key into a Path
+func Path(k *datastore.Key) (p string) {
+	if k.Incomplete() == false {
+		p = "/" + strconv.FormatInt(k.ID, 10)
+	}
+	p = "/" + k.Kind + p
+	for {
+		k = k.Parent
+		if k == nil {
+			break
+		}
+		p = "/" + k.Kind + "/" + strconv.FormatInt(k.ID, 10) + p
+	}
+	return p
+}
+

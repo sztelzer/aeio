@@ -17,9 +17,9 @@ var DatastoreClient *datastore.Client
 var FireApp *firebase.App
 var FireAppAuthClient *firebaseAuth.Client
 
-
 func init() {
 	var err error
+
 	Context, ContextCancel = context.WithCancel(context.Background())
 	DatastoreClient, err = datastore.NewClient(Context, datastore.DetectProjectID)
 	if err != nil {
@@ -39,6 +39,15 @@ func init() {
 
 }
 
+// ShutdownApplication should be called anytime the app exits to close services connections.
+// Recommended to be put as a deferred call on the start of the main application.
+// ie.:
+// `func main() {
+//	defer aeio.ShutdownApplication()
+//  ... middleware and routes ...
+// 	err = aeio.Serve(router)
+//	log.Fatal(err)
+// }
 func ShutdownApplication() {
 	err := DatastoreClient.Close()
 	if err != nil {

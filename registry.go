@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"log"
 	"reflect"
 	"regexp"
 )
@@ -43,17 +44,36 @@ func NewObject(alias string) (interface{}, error) {
 var children = make(map[string]map[string]struct{})
 
 func RegisterChild(parent string, child string) {
-	if parent != "" && models[parent] == nil {
-		panic(fmt.Sprintln("parent model", parent, "is not registered or defined"))
-	}
-	if child == "" || models[child] == nil {
-		panic(fmt.Sprintln("model", child, "is not registered or defined"))
-	}
+	// if parent != "" && models[parent] == nil {
+	// 	panic(fmt.Sprintln("parent model", parent, "is not registered or defined"))
+	// }
+	// if child == "" || models[child] == nil {
+	// 	panic(fmt.Sprintln("model", child, "is not registered or defined"))
+	// }
 	if children[parent] == nil {
 		children[parent] = make(map[string]struct{})
 	}
 	children[parent][child] = struct{}{}
 }
+
+// CheckRegistry verifies if all relationships are for registered objects.
+func CheckRegistry(print bool) {
+	if print {
+		log.Println(models)
+		log.Println(children)
+	}
+	for parent, children := range children {
+		for child, _ := range children {
+			if parent != "" && models[parent] == nil {
+				log.Panicln("parent model", parent, "is not registered or defined")
+			}
+			if child == "" || models[child] == nil {
+				log.Panicln("child model", child, "is not registered or defined")
+			}
+		}
+	}
+}
+
 
 // ValidatePaternity simply verifies that the parent key can have this kind of child.
 func ValidatePaternity(p string, c string) error {
