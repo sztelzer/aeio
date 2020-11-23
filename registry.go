@@ -141,21 +141,21 @@ func TestFunction(m string, f string) error {
 // actions maps what is being made with the resource so other parts of the code can be aware and take decisions.
 
 const (
-	actionGet     = "GET"
-	actionList    = "LIST"
-	actionPut     = "PUT"
-	actionDelete  = "DELETE"
-	actionListAny = "LIST_ANY"
-	actionError   = "ERROR"
+	ActionGet     = "GET"
+	ActionList    = "LIST"
+	ActionPut     = "PUT"
+	ActionDelete  = "DELETE"
+	ActionListAny = "LIST_ANY"
+	ActionError   = "ERROR"
 )
 
 var actions = map[string]struct{}{
-	actionError:   {},
-	actionGet:     {},
-	actionList:    {},
-	actionListAny: {},
-	actionPut:     {},
-	actionDelete:  {},
+	ActionError:   {},
+	ActionGet:     {},
+	ActionList:    {},
+	ActionListAny: {},
+	ActionPut:     {},
+	ActionDelete:  {},
 }
 
 // func RegisterAction(action string) {
@@ -171,4 +171,8 @@ func ValidAction(action string) {
 	if !ok {
 		panic(fmt.Sprintf("invalid action: %s (action is not registered)", action))
 	}
+}
+
+func Action(action string) {
+
 }

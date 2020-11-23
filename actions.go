@@ -13,8 +13,9 @@ import (
 // Update saves: create, overwrite completely, or overwrite parts
 func (r *Resource) Put() error {
 	var err error
-	r.EnterAction(actionPut)
-	defer r.ExitAction(actionPut)
+
+	r.EnterAction(ActionPut)
+	defer r.ExitAction(ActionPut)
 
 	err = ValidateKey(r.Key)
 	if err != nil {
@@ -55,12 +56,12 @@ func (r *Resource) Put() error {
 }
 
 
-// Read is an action that reads a resource from datastore. It always replace the object present with a new one of the right kind.
+// Get is an action that reads a resource from datastore. It always replace the object present with a new one of the right kind.
 // The resource only need to have a complete key.
 func (r *Resource) Get() error {
 	var err error
-	r.EnterAction(actionGet)
-	defer r.ExitAction(actionGet)
+	r.EnterAction(ActionGet)
+	defer r.ExitAction(ActionGet)
 
 	if r.Key.Incomplete() {
 		return errorInvalidPath.withHint(fmt.Sprintf("%s", "The key passed to get is incomplete"))
@@ -101,8 +102,8 @@ func (r *Resource) Get() error {
 
 func (r *Resource) List() error {
 	var err error
-	r.EnterAction(actionList)
-	defer r.ExitAction(actionList)
+	r.EnterAction(ActionList)
+	defer r.ExitAction(ActionList)
 
 	// key must be incomplete
 	if !r.Key.Incomplete() {
@@ -126,8 +127,8 @@ func (r *Resource) List() error {
 
 func (r *Resource) ListAny() error {
 	var err error
-	r.EnterAction(actionListAny)
-	defer r.ExitAction(actionListAny)
+	r.EnterAction(ActionListAny)
+	defer r.ExitAction(ActionListAny)
 
 	// key must be incomplete
 	if !r.Key.Incomplete() {
@@ -244,7 +245,12 @@ func (r *Resource) RunListQuery(q *datastore.Query) error {
 		}
 	}
 
-	r.ResourcesCount = len(r.Resources)
+
+	r.ResourcesCount = 0
+	if len(r.Resources) > 0 {
+		r.ResourcesCount = len(r.Resources)
+	}
+	log.Println(r.ResourcesCount)
 	return nil
 }
 

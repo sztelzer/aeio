@@ -21,14 +21,14 @@ type Resource struct {
 	Key            *datastore.Key `datastore:"-" json:"-"`
 	Data           interface{}    `datastore:"-" json:"data,omitempty"`
 	error          error          `datastore:"-"`
-	CreatedAt      time.Time      `datastore:"-" json:"created_at,omitempty"`
+	CreatedAt      time.Time      `datastore:"-" json:"createdAt,omitempty"`
 	Access         *Access        `datastore:"-" json:"-"`
 	ActionsStack   []string       `datastore:"-" json:"-"`
 	ActionsHistory []string       `datastore:"-" json:"-"`
 	Resources      []*Resource    `datastore:"-" json:"resources,omitempty"`
-	ResourcesCount int            `datastore:"-" json:"resources_count,omitempty"`
-	Next           string         `datastore:"-" json:"next,omitempty"`
-	TimeElapsed    int64          `datastore:"-" json:"time_elapsed,omitempty"`
+	ResourcesCount int            `datastore:"-" json:"resourcesCount,omitempty"`
+	Next           string         `datastore:"-" json:"-"`
+	TimeElapsed    int64          `datastore:"-" json:"timeElapsed,omitempty"`
 }
 
 type DataBeforeSave interface {
@@ -80,7 +80,7 @@ func (r *Resource) Load(ps []datastore.Property) (err error) {
 	for _, p := range ps {
 		switch p.Name {
 		case "CreatedAt":
-			r.CreatedAt = p.Value.(time.Time)
+			r.CreatedAt = NoZeroTime(p.Value.(time.Time))
 		case "Parent":
 		default:
 			ps2 = append(ps2, p)
@@ -143,12 +143,14 @@ func (r *Resource) CopyData(dst *Resource) error {
 func (r *Resource) MarshalJSON() ([]byte, error) {
 	type Alias Resource
 	return json.Marshal(&struct {
-		Path  string `json:"path"`
+		Path  string `json:"key"`
 		Error error  `json:"error"`
+		CreatedAt time.Time `json:"createdAt"`
 		*Alias
 	}{
 		Path:  Path(r.Key),
 		Error: r.error,
+		CreatedAt: NoZeroTime(r.CreatedAt),
 		Alias: (*Alias)(r),
 	})
 }
@@ -215,6 +217,7 @@ func (r *Resource) AssertAction(action string) (ok bool) {
 }
 
 func (r *Resource) EnterAction(action string) {
+	log.Println("entering action:", action)
 	r.ActionsHistory = append(r.ActionsHistory, action)
 	if r.AssertAction("complexError") {
 		return
@@ -442,8 +445,7 @@ func (r *Resource) Respond(err error) {
 		r.Access.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	}
 
-
-	log.Printf("%d %s %s %s", status, r.Access.Request.Method, r.Access.Request.URL.Path, err)
+	log.Println(status, r.Access.Request.Method, r.Access.Request.URL.Path, err)
 
 	j, err := json.Marshal(r)
 	if err != nil {
