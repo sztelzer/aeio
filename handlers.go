@@ -11,11 +11,11 @@ func HandleGet(r *Resource) error {
 }
 
 func HandleList(r *Resource) error {
-	return r.List()
+	return r.GetMany()
 }
 
 func HandleListAny(r *Resource) error {
-	return r.ListAny()
+	return r.GetAny()
 }
 
 func HandleDelete(r *Resource) error {

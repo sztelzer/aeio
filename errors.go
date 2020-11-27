@@ -100,7 +100,7 @@ var (
 	errorRequestBodyRead = &complexError{
 		Name: errRequest,
 		Desc: "Error reading request body",
-		Hint: "Verify the presence of invalid characters for utf8",
+		Hint: "Verify the presence of invalid characters",
 		Code: http.StatusBadRequest,
 	}
 )

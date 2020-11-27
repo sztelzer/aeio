@@ -132,7 +132,7 @@ func parseInt(v string) (i int) {
 
 // func GenerateRandomBytes(n int) ([]byte, error) {
 // 	b := make([]byte, n)
-// 	_, err := rand.Read(b)
+// 	_, err := rand.Get(b)
 // 	if err != nil {
 // 		return nil, err
 // 	}

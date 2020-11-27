@@ -10,28 +10,30 @@ import (
 	// "google.golang.org/api/iterator"
 )
 
-// Update saves: create, overwrite completely, or overwrite parts
+// Put creates a new resource
 func (r *Resource) Put() error {
 	var err error
 
-	r.EnterAction(ActionPut)
-	defer r.ExitAction(ActionPut)
+	r.EnterAction(ActionCreate)
+	defer r.ExitAction(ActionCreate)
 
 	err = ValidateKey(r.Key)
 	if err != nil {
-		return err
+		return errorInvalidPath.withCause(err).withStack().withLog()
 	}
 
+	reset := true
 	if r.Access.Request.Method == http.MethodPatch {
 		err = r.Get()
 		if err != nil {
 			return err
 		}
+		reset = false
 	}
 
-	err = r.BindRequestData()
+	err = r.BindRequestData(reset)
 	if err != nil {
-		return err
+		return errorUnknown.withCause(err).withStack().withLog()
 	}
 
 	if data, ok := r.Data.(DataBeforeSave); ok {
@@ -43,7 +45,7 @@ func (r *Resource) Put() error {
 
 	r.Key, err = DatastoreClient.Put(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
-		return errorDatastorePut.withCause(err).withStack()
+		return errorDatastorePut.withCause(err).withStack().withLog()
 	}
 
 	if data, ok := r.Data.(DataAfterSave); ok {
@@ -52,67 +54,67 @@ func (r *Resource) Put() error {
 			return errorUnknown.withCause(err).withStack().withLog()
 		}
 	}
-	return err
-}
 
+	return nil
+}
 
 // Get is an action that reads a resource from datastore. It always replace the object present with a new one of the right kind.
 // The resource only need to have a complete key.
 func (r *Resource) Get() error {
 	var err error
-	r.EnterAction(ActionGet)
-	defer r.ExitAction(ActionGet)
+	r.EnterAction(ActionRead)
+	defer r.ExitAction(ActionRead)
 
 	if r.Key.Incomplete() {
-		return errorInvalidPath.withHint(fmt.Sprintf("%s", "The key passed to get is incomplete"))
+		return errorInvalidPath.withHint(fmt.Sprintf("%s", "The key passed to read is incomplete")).withStack().withLog()
 	}
 
 	err = ValidateKey(r.Key)
 	if err != nil {
-		return err
+		return errorUnknown.withCause(err).withStack().withLog()
 	}
 
 	r.Data, err = NewObject(r.Key.Kind)
 	if err != nil {
-		return err
+		return errorUnknown.withCause(err).withStack().withLog()
 	}
 
 	if data, ok := r.Data.(DataBeforeLoad); ok {
 		err = data.BeforeLoad(r)
 		if err != nil {
-			return err
+			return errorUnknown.withCause(err).withStack().withLog()
 		}
 	}
 
 	err = DatastoreClient.Get(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
-		return errorDatastoreRead.withCause(err)
+		return errorDatastoreRead.withCause(err).withStack().withLog()
 	}
 
 	if data, ok := r.Data.(DataAfterLoad); ok {
 		err = data.AfterLoad(r)
 		if err != nil {
-			return err
+			return errorUnknown.withCause(err).withStack().withLog()
 		}
 	}
 
-	return err
+	return nil
 }
 
 
-func (r *Resource) List() error {
+func (r *Resource) GetMany() error {
 	var err error
-	r.EnterAction(ActionList)
-	defer r.ExitAction(ActionList)
+	r.EnterAction(ActionReadMany)
+	defer r.ExitAction(ActionReadMany)
 
 	// key must be incomplete
 	if !r.Key.Incomplete() {
-		return errorInvalidPath.withHint("Lists only works under models, not ids: remove the id from the end of path")
+		return errorInvalidPath.withHint("Lists only works under models, not ids: remove the id from the end of path").withStack().withLog()
 	}
 
 	err = ValidateKey(r.Key)
 	if err != nil {
-		return err
+		return errorUnknown.withCause(err).withStack().withLog()
 	}
 
 	q := datastore.NewQuery(r.Key.Kind)
@@ -121,14 +123,17 @@ func (r *Resource) List() error {
 	}
 
 	err = r.RunListQuery(q)
+	if err != nil {
+		return errorUnknown.withCause(err).withStack().withLog()
+	}
 
-	return err
+	return nil
 }
 
-func (r *Resource) ListAny() error {
+func (r *Resource) GetAny() error {
 	var err error
-	r.EnterAction(ActionListAny)
-	defer r.ExitAction(ActionListAny)
+	r.EnterAction(ActionReadAny)
+	defer r.ExitAction(ActionReadAny)
 
 	// key must be incomplete
 	if !r.Key.Incomplete() {
@@ -148,15 +153,19 @@ func (r *Resource) ListAny() error {
 	}
 
 	err = r.RunListQuery(q)
-	return err
+	if err != nil {
+		return errorUnknown.withCause(err).withStack().withLog()
+	}
+
+	return nil
 }
 
 const (
-	headerListNext            = "X-List-Next-Cursor"
-	headerListLimit           = "X-List-Limit"
-	headerListPageSize        = "X-List-Page-Size"
-	headerListFieldAscending  = "X-List-Field-Ascending"
-	headerListFieldDescending = "X-List-Field-Descending"
+	headerListNext            = "X-GetMany-Next-Cursor"
+	headerListLimit           = "X-GetMany-Limit"
+	headerListPageSize        = "X-GetMany-Page-Size"
+	headerListFieldAscending  = "X-GetMany-Field-Ascending"
+	headerListFieldDescending = "X-GetMany-Field-Descending"
 )
 
 func (r *Resource) RunListQuery(q *datastore.Query) error {

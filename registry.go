@@ -141,21 +141,22 @@ func TestFunction(m string, f string) error {
 // actions maps what is being made with the resource so other parts of the code can be aware and take decisions.
 
 const (
-	ActionGet     = "GET"
-	ActionList    = "LIST"
-	ActionPut     = "PUT"
-	ActionDelete  = "DELETE"
-	ActionListAny = "LIST_ANY"
-	ActionError   = "ERROR"
+	ActionCreate   = "CREATE"
+	ActionRead     = "GET"
+	ActionReadMany = "GET-MANY"
+	ActionReadAny  = "GET-ANY"
+	ActionUpdate   = "UPDATE"
+	ActionDelete   = "DELETE"
+	ActionError    = "ERROR"
 )
 
 var actions = map[string]struct{}{
-	ActionError:   {},
-	ActionGet:     {},
-	ActionList:    {},
-	ActionListAny: {},
-	ActionPut:     {},
-	ActionDelete:  {},
+	ActionError:    {},
+	ActionRead:     {},
+	ActionReadMany: {},
+	ActionReadAny:  {},
+	ActionCreate:   {},
+	ActionDelete:   {},
 }
 
 // func RegisterAction(action string) {

@@ -55,6 +55,10 @@ type DataAfterDelete interface {
 	AfterDelete(*Resource) error
 }
 
+type DataBind interface {
+	Bind(*Resource, interface{}) error
+}
+
 // // NewList return a new resource with the list type added to the key.
 // func NewListResource(parentResource *Resource, listKind string) (r *Resource) {
 // 	return NewResource(parentResource.Access, parentResource.Key, listKind)
@@ -74,7 +78,7 @@ func (r *Resource) Save() (ps []datastore.Property, err error) {
 	return ps, nil
 }
 
-// Load extracts the datastore data in an object, taking CreatedAt and Parent off the object.
+// Load extracts the datastore data into an object, taking CreatedAt and Parent off the object.
 func (r *Resource) Load(ps []datastore.Property) (err error) {
 	var ps2 []datastore.Property
 	for _, p := range ps {
@@ -102,9 +106,11 @@ func (r *Resource) NewData(kind string) error {
 	return nil
 }
 
-func (r *Resource) BindRequestData() error {
+// BindRequestData resets destiny data object in most cases.
+// If data type implements DataBind interface, it will be used
+func (r *Resource) BindRequestData(reset bool) error {
 	var err error
-	if r.Data == nil {
+	if r.Data == nil || reset {
 		err = r.NewData(r.Key.Kind)
 		if err != nil {
 			return err
@@ -120,10 +126,36 @@ func (r *Resource) BindRequestData() error {
 		return errorRequestBodyRead.withCause(err).withStack()
 	}
 
+	// if is patch and has method bind
+	if data, ok := r.Data.(DataBind); ok {
+		// this is like r.NewData()
+		if models[r.Key.Kind] == nil {
+			return errorResourceModelNotImplemented.withStack()
+		}
+		val := reflect.ValueOf(models[r.Key.Kind])
+		if val.Kind() == reflect.Ptr {
+			val = reflect.Indirect(val)
+		}
+		requestData := reflect.New(val.Type()).Interface()
+
+		// load from request
+		err = json.Unmarshal(bodyContent, &requestData)
+		if err != nil {
+			return errorRequestUnmarshal.withCause(err).withStack()
+		}
+
+		err := data.Bind(r, requestData)
+		if err != nil {
+			return errorUnknown.withCause(err).withStack().withLog()
+		}
+	}
+
+	// load directly to data object otherwise
 	err = json.Unmarshal(bodyContent, &r.Data)
 	if err != nil {
 		return errorRequestUnmarshal.withCause(err).withStack()
 	}
+
 	return nil
 }
 
@@ -143,15 +175,15 @@ func (r *Resource) CopyData(dst *Resource) error {
 func (r *Resource) MarshalJSON() ([]byte, error) {
 	type Alias Resource
 	return json.Marshal(&struct {
-		Path  string `json:"key"`
-		Error error  `json:"error"`
+		Path      string    `json:"key"`
+		Error     error     `json:"error"`
 		CreatedAt time.Time `json:"createdAt"`
 		*Alias
 	}{
-		Path:  Path(r.Key),
-		Error: r.error,
+		Path:      Path(r.Key),
+		Error:     r.error,
 		CreatedAt: NoZeroTime(r.CreatedAt),
-		Alias: (*Alias)(r),
+		Alias:     (*Alias)(r),
 	})
 }
 
@@ -359,7 +391,7 @@ func (r *Resource) ExitAction(action string) {
 //	}
 //
 //	if r.Data == nil {
-//		r.Read()
+//		r.Get()
 //		if r.HasErrors() {
 //			return
 //		}
