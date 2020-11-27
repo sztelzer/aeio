@@ -2,15 +2,14 @@ package aeio
 
 import (
 	"cloud.google.com/go/datastore"
+	"errors"
 	"fmt"
 	"google.golang.org/api/iterator"
 	"log"
 	"net/http"
-
-	// "google.golang.org/api/iterator"
 )
 
-// Put creates a new resource
+// Put creates a new resource or updates
 func (r *Resource) Put() error {
 	var err error
 
@@ -24,11 +23,18 @@ func (r *Resource) Put() error {
 
 	reset := true
 	if r.Access.Request.Method == http.MethodPatch {
+		if r.Key.Incomplete() {
+			return errorInvalidPath.withCause(errors.New("key must be complete for patching")).withStack().withLog()
+		}
 		err = r.Get()
 		if err != nil {
 			return err
 		}
 		reset = false
+	} else {
+		if !r.Key.Incomplete() {
+			return errorInvalidPath.withCause(errors.New("key must be incomplete for creating")).withStack().withLog()
+		}
 	}
 
 	err = r.BindRequestData(reset)
