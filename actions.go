@@ -9,20 +9,19 @@ import (
 	"net/http"
 )
 
-// Put creates a new resource or updates
+// Put creates a new resource or updates it
 func (r *Resource) Put() error {
 	var err error
-
-	r.EnterAction(ActionCreate)
-	defer r.ExitAction(ActionCreate)
 
 	err = ValidateKey(r.Key)
 	if err != nil {
 		return errorInvalidPath.withCause(err).withStack().withLog()
 	}
 
-	reset := true
 	if r.Access.Request.Method == http.MethodPatch {
+		r.EnterAction(ActionUpdate)
+		defer r.ExitAction(ActionUpdate)
+
 		if r.Key.Incomplete() {
 			return errorInvalidPath.withCause(errors.New("key must be complete for patching")).withStack().withLog()
 		}
@@ -30,14 +29,16 @@ func (r *Resource) Put() error {
 		if err != nil {
 			return err
 		}
-		reset = false
 	} else {
+		r.EnterAction(ActionCreate)
+		defer r.ExitAction(ActionCreate)
+
 		if !r.Key.Incomplete() {
 			return errorInvalidPath.withCause(errors.New("key must be incomplete for creating")).withStack().withLog()
 		}
 	}
 
-	err = r.BindRequestData(reset)
+	err = r.BindRequestData()
 	if err != nil {
 		return errorUnknown.withCause(err).withStack().withLog()
 	}
@@ -271,8 +272,8 @@ func (r *Resource) RunListQuery(q *datastore.Query) error {
 
 func (r *Resource) Delete() error {
 	var err error
-	r.EnterAction("delete")
-	defer r.ExitAction("delete")
+	r.EnterAction(ActionDelete)
+	defer r.ExitAction(ActionDelete)
 
 	err = r.Get()
 	if err != nil {

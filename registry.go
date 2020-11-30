@@ -2,7 +2,6 @@ package aeio
 
 import (
 	"cloud.google.com/go/datastore"
-	"encoding/gob"
 	"errors"
 	"fmt"
 	"log"
@@ -10,9 +9,7 @@ import (
 	"regexp"
 )
 
-
 var validPath = regexp.MustCompile(`^(?:/[a-z]+/[0-9]+)*(/[a-z]+)?$`)
-
 
 // models allow aeio to instantiate new objects based on keys and paths.
 var models = make(map[string]interface{})
@@ -21,13 +18,13 @@ func RegisterModel(alias string, model interface{}) {
 	if _, ok := models[alias]; ok {
 		panic("aeio: Register called twice for model " + alias)
 	}
-	gob.Register(model)
+	// gob.Register(model)
 	models[alias] = model
 }
 
 func NewObject(alias string) (interface{}, error) {
 	if models[alias] == nil {
-		err := errors.New("Resource " + alias + " is not implemented.")
+		err := errors.New("Model " + alias + " is not implemented/registered.")
 		return nil, errorResourceModelNotImplemented.withCause(err).withStack().withLog()
 	}
 	val := reflect.ValueOf(models[alias])
@@ -37,6 +34,32 @@ func NewObject(alias string) (interface{}, error) {
 	newObj := reflect.New(val.Type()).Interface()
 
 	return newObj, nil
+}
+
+// patchers allow aeio to instantiate new patcher objects based on keys and paths.
+// patchers are useful to allow only some fields of the original model, and use pointers to separate nil and zero values.
+var patchers = make(map[string]interface{})
+
+func RegisterPatcher(alias string, patcher interface{}) {
+	if _, ok := patchers[alias]; ok {
+		panic("aeio: Register called twice for patcher " + alias)
+	}
+	// gob.Register(patcher)
+	patchers[alias] = patcher
+}
+
+func NewPatcher(alias string) (interface{}, error) {
+	if patchers[alias] == nil {
+		err := errors.New("Patcher " + alias + " is not implemented/registered.")
+		return nil, errorResourceModelNotImplemented.withCause(err).withStack().withLog()
+	}
+	val := reflect.ValueOf(patchers[alias])
+	if val.Kind() == reflect.Ptr {
+		val = reflect.Indirect(val)
+	}
+	newPatcher := reflect.New(val.Type()).Interface()
+
+	return newPatcher, nil
 }
 
 // children allowed to specific models.
@@ -73,7 +96,6 @@ func CheckRegistry(print bool) {
 		}
 	}
 }
-
 
 // ValidatePaternity simply verifies that the parent key can have this kind of child.
 func ValidatePaternity(p string, c string) error {
@@ -151,12 +173,13 @@ const (
 )
 
 var actions = map[string]struct{}{
-	ActionError:    {},
+	ActionCreate:   {},
 	ActionRead:     {},
 	ActionReadMany: {},
 	ActionReadAny:  {},
-	ActionCreate:   {},
+	ActionUpdate:   {},
 	ActionDelete:   {},
+	ActionError:    {},
 }
 
 // func RegisterAction(action string) {

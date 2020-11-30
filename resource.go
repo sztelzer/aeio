@@ -4,6 +4,7 @@ import (
 	"cloud.google.com/go/datastore"
 	"encoding/json"
 	"fmt"
+	patchstruct "github.com/sztelzer/structpatch"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -106,11 +107,13 @@ func (r *Resource) NewData(kind string) error {
 	return nil
 }
 
-// BindRequestData resets destiny data object in most cases.
-// If data type implements DataBind interface, it will be used
-func (r *Resource) BindRequestData(reset bool) error {
+
+// BindRequestData takes the request data to the object data it will always respect the json tag of fields,
+// and on specifically action UPDATE will bind only allowed fields. This is useful for locking fields on
+// the original state.
+func (r *Resource) BindRequestData() error {
 	var err error
-	if r.Data == nil || reset {
+	if r.Data == nil {
 		err = r.NewData(r.Key.Kind)
 		if err != nil {
 			return err
@@ -126,38 +129,67 @@ func (r *Resource) BindRequestData(reset bool) error {
 		return errorRequestBodyRead.withCause(err).withStack()
 	}
 
-	// if is patch and has method bind
-	if data, ok := r.Data.(DataBind); ok {
-		// this is like r.NewData()
-		if models[r.Key.Kind] == nil {
-			return errorResourceModelNotImplemented.withStack()
-		}
-		val := reflect.ValueOf(models[r.Key.Kind])
-		if val.Kind() == reflect.Ptr {
-			val = reflect.Indirect(val)
-		}
-		requestData := reflect.New(val.Type()).Interface()
-
-		// load from request
-		err = json.Unmarshal(bodyContent, &requestData)
+	if !r.AssertAction(ActionUpdate) {
+		// load directly into r.Data
+		err = json.Unmarshal(bodyContent, &r.Data)
 		if err != nil {
 			return errorRequestUnmarshal.withCause(err).withStack()
 		}
+		return nil
+	}
 
-		err := data.Bind(r, requestData)
+	// ok, it's UPDATE
+	// Let's load into a temporary Data, and only copy
+	// non empty, non locked fields
+
+	// create patcher temporary object
+	var patcher interface{}
+	patcher, err = NewPatcher(r.Key.Kind)
+	if err != nil {
+		patcher, err = NewObject(r.Key.Kind)
 		if err != nil {
-			return errorUnknown.withCause(err).withStack().withLog()
+			return errorRequestUnmarshal.withCause(err).withStack().withLog()
 		}
 	}
 
-	// load directly to data object otherwise
-	err = json.Unmarshal(bodyContent, &r.Data)
+	// load data from request into temporary requestData
+	err = json.Unmarshal(bodyContent, &patcher)
 	if err != nil {
-		return errorRequestUnmarshal.withCause(err).withStack()
+		return errorRequestUnmarshal.withCause(err).withStack().withLog()
+	}
+
+	err = patchstruct.Patch(patcher, r.Data, "ignored")
+	if err != nil {
+		return errorRequestUnmarshal.withCause(err).withStack().withLog()
 	}
 
 	return nil
 }
+
+// patchFields copy recursively
+// func patchFields(src interface{}, dst interface{}) interface{} {
+// 	srcStructValue := reflect.ValueOf(src)
+// 	dstStructValue := reflect.ValueOf(dst)
+// 	dstStructType := reflect.TypeOf(dst)
+//
+// 	for i := 0; i < srcStructValue.NumField(); i++ {
+// 		srcField := srcStructValue.Field(i)
+// 		dstField := dstStructValue.Field(i)
+// 		if _, locked := dstStructType.Field(i).Tag.Lookup("lock"); locked {
+// 			continue
+// 		}
+//
+// 		if !dstField.IsNil() && srcField.IsValid() && !srcField.IsZero() {
+//
+//
+// 			dstField.Set(srcField)
+// 		}
+// 	}
+//
+// 	return dst
+// }
+
+
 
 func (r *Resource) CopyData(dst *Resource) error {
 	var p datastore.PropertyList
