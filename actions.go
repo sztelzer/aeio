@@ -2,11 +2,9 @@ package aeio
 
 import (
 	"cloud.google.com/go/datastore"
-	"errors"
 	"fmt"
 	"google.golang.org/api/iterator"
 	"log"
-	"net/http"
 )
 
 // Put creates a new resource or updates it
@@ -18,26 +16,22 @@ func (r *Resource) Put() error {
 		return errorInvalidPath.withCause(err).withStack().withLog()
 	}
 
-	if r.Access.Request.Method == http.MethodPatch {
+	if r.Key.Incomplete() {
+		r.EnterAction(ActionCreate)
+		defer r.ExitAction(ActionCreate)
+
+	} else {
 		r.EnterAction(ActionUpdate)
 		defer r.ExitAction(ActionUpdate)
 
-		if r.Key.Incomplete() {
-			return errorInvalidPath.withCause(errors.New("key must be complete for patching")).withStack().withLog()
-		}
 		err = r.Get()
 		if err != nil {
 			return err
 		}
-	} else {
-		r.EnterAction(ActionCreate)
-		defer r.ExitAction(ActionCreate)
 
-		if !r.Key.Incomplete() {
-			return errorInvalidPath.withCause(errors.New("key must be incomplete for creating")).withStack().withLog()
-		}
 	}
 
+	// TODO: how to opt out if already patched?
 	err = r.BindRequestData()
 	if err != nil {
 		return errorUnknown.withCause(err).withStack().withLog()
