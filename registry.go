@@ -107,7 +107,7 @@ func ValidatePaternity(p string, c string) error {
 	return nil
 }
 
-// ValidateKey checks if the key chain is valid
+// ValidateKey checks if the key chain is valid, but don't check the existence of parents in datastore.
 func ValidateKey(k *datastore.Key) error {
 	if k == nil {
 		return errorInvalidPath.withStack().withLog()
@@ -170,16 +170,19 @@ const (
 	ActionUpdate   = "UPDATE"
 	ActionDelete   = "DELETE"
 	ActionError    = "ERROR"
+
+	ActionReadManyCount = "GET-MANY-COUNT"
 )
 
 var actions = map[string]struct{}{
-	ActionCreate:   {},
-	ActionRead:     {},
-	ActionReadMany: {},
-	ActionReadAny:  {},
-	ActionUpdate:   {},
-	ActionDelete:   {},
-	ActionError:    {},
+	ActionCreate:        {},
+	ActionRead:          {},
+	ActionReadMany:      {},
+	ActionReadManyCount: {},
+	ActionReadAny:       {},
+	ActionUpdate:        {},
+	ActionDelete:        {},
+	ActionError:         {},
 }
 
 // func RegisterAction(action string) {
@@ -195,8 +198,4 @@ func ValidAction(action string) {
 	if !ok {
 		panic(fmt.Sprintf("invalid action: %s (action is not registered)", action))
 	}
-}
-
-func Action(action string) {
-
 }

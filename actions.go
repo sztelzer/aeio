@@ -2,36 +2,26 @@ package aeio
 
 import (
 	"cloud.google.com/go/datastore"
+	"errors"
 	"fmt"
 	"google.golang.org/api/iterator"
 	"log"
 )
 
-// Put creates a new resource or updates it
-func (r *Resource) Put() error {
+// Create creates a new resource
+func (r *Resource) Create() error {
 	var err error
+	r.EnterAction(ActionCreate)
+	defer r.ExitAction(ActionCreate)
 
-	err = ValidateKey(r.Key)
-	if err != nil {
+	if err = ValidateKey(r.Key); err != nil {
 		return errorInvalidPath.withCause(err).withStack().withLog()
 	}
 
-	if r.Key.Incomplete() {
-		r.EnterAction(ActionCreate)
-		defer r.ExitAction(ActionCreate)
-
-	} else {
-		r.EnterAction(ActionUpdate)
-		defer r.ExitAction(ActionUpdate)
-
-		err = r.Get()
-		if err != nil {
-			return err
-		}
-
+	if !r.Key.Incomplete() {
+		return errorInvalidPath.withCause(errors.New("path key must be incomplete for creation")).withStack().withLog()
 	}
 
-	// TODO: how to opt out if already patched?
 	err = r.BindRequestData()
 	if err != nil {
 		return errorUnknown.withCause(err).withStack().withLog()
@@ -58,6 +48,55 @@ func (r *Resource) Put() error {
 
 	return nil
 }
+
+func (r *Resource) Update() error {
+	var err error
+	r.EnterAction(ActionUpdate)
+	defer r.ExitAction(ActionUpdate)
+
+	err = ValidateKey(r.Key)
+	if err != nil {
+		return errorInvalidPath.withCause(err).withStack().withLog()
+	}
+
+	if r.Key.Incomplete() {
+		return errorInvalidPath.withCause(errors.New("path key must be complete for update")).withStack().withLog()
+	}
+
+	if r.Data == nil {
+		err = r.Get()
+		if err != nil {
+			return err
+		}
+
+		err = r.BindRequestData()
+		if err != nil {
+			return errorUnknown.withCause(err).withStack().withLog()
+		}
+	}
+
+	if data, ok := r.Data.(DataBeforeSave); ok {
+		err := data.BeforeSave(r)
+		if err != nil {
+			return errorUnknown.withCause(err).withStack().withLog()
+		}
+	}
+
+	r.Key, err = DatastoreClient.Put(r.Access.Request.Context(), r.Key, r)
+	if err != nil {
+		return errorDatastorePut.withCause(err).withStack().withLog()
+	}
+
+	if data, ok := r.Data.(DataAfterSave); ok {
+		err := data.AfterSave(r)
+		if err != nil {
+			return errorUnknown.withCause(err).withStack().withLog()
+		}
+	}
+
+	return nil
+}
+
 
 // Get is an action that reads a resource from datastore. It always replace the object present with a new one of the right kind.
 // The resource only need to have a complete key.
@@ -130,6 +169,38 @@ func (r *Resource) GetMany() error {
 
 	return nil
 }
+
+func (r *Resource) GetManyCount() error {
+	var err error
+	r.EnterAction(ActionReadManyCount)
+	defer r.ExitAction(ActionReadManyCount)
+
+	// key must be incomplete
+	if !r.Key.Incomplete() {
+		return errorInvalidPath.withHint("Lists only works under models, not ids: remove the id from the end of path").withStack().withLog()
+	}
+
+	err = ValidateKey(r.Key)
+	if err != nil {
+		return errorUnknown.withCause(err).withStack().withLog()
+	}
+
+	q := datastore.NewQuery(r.Key.Kind)
+	if r.Key.Parent != nil {
+		q = q.Filter("Parent =", r.Key.Parent)
+	}
+
+	count, err := DatastoreClient.Count(r.Access.Request.Context(), q)
+	if err != nil {
+		return errorUnknown.withCause(err).withStack().withLog()
+	}
+
+	r.ResourcesCount = &count
+
+	return nil
+}
+
+
 
 func (r *Resource) GetAny() error {
 	var err error
@@ -219,7 +290,6 @@ func (r *Resource) RunListQuery(q *datastore.Query) error {
 			r.Next = ""
 			break
 		} else if iteErr != nil {
-			log.Println("HERE!!")
 			return errorUnknown.withCause(iteErr).withStack().withLog()
 		}
 
@@ -255,12 +325,8 @@ func (r *Resource) RunListQuery(q *datastore.Query) error {
 		}
 	}
 
-
-	r.ResourcesCount = 0
-	if len(r.Resources) > 0 {
-		r.ResourcesCount = len(r.Resources)
-	}
-	log.Println(r.ResourcesCount)
+	length := len(r.Resources)
+	r.ResourcesCount = &length
 	return nil
 }
 

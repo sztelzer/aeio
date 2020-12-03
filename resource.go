@@ -27,7 +27,7 @@ type Resource struct {
 	ActionsStack   []string       `datastore:"-" json:"-"`
 	ActionsHistory []string       `datastore:"-" json:"-"`
 	Resources      []*Resource    `datastore:"-" json:"resources,omitempty"`
-	ResourcesCount int            `datastore:"-" json:"resourcesCount,omitempty"`
+	ResourcesCount *int            `datastore:"-" json:"resourcesCount,omitempty"`
 	Next           string         `datastore:"-" json:"-"`
 	TimeElapsed    int64          `datastore:"-" json:"timeElapsed,omitempty"`
 }
@@ -288,11 +288,11 @@ func (r *Resource) EnterAction(action string) {
 	}
 
 	ValidAction(action)
-	if len(r.ActionsStack) > 0 {
-		if r.ActionsStack[len(r.ActionsStack)-1] == action {
-			panic(fmt.Sprint("repeated_action", action))
-		}
-	}
+	// if len(r.ActionsStack) > 0 {
+	// 	if r.ActionsStack[len(r.ActionsStack)-1] == action {
+	// 		panic(fmt.Sprint("repeated_action", action))
+	// 	}
+	// }
 	r.ActionsStack = append(r.ActionsStack, action)
 }
 
@@ -404,7 +404,7 @@ func (r *Resource) ExitAction(action string) {
 //		return
 //	}
 //
-//	_, withCause = index.Put(r.Access.Request.Context(), r.Key.Encode(), (search.FieldLoadSaver)(r.Doc))
+//	_, withCause = index.Create(r.Access.Request.Context(), r.Key.Encode(), (search.FieldLoadSaver)(r.Doc))
 //	if withCause != nil {
 //		r.Log("index_put", withCause)
 //	}

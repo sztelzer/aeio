@@ -2,15 +2,19 @@ package aeio
 
 type Handler func(*Resource) error
 
-func HandlePut(r *Resource) error {
-	return r.Put()
+func HandleCreate(r *Resource) error {
+	return r.Create()
+}
+
+func HandleUpdate(r *Resource) error {
+	return r.Update()
 }
 
 func HandleGet(r *Resource) error {
 	return r.Get()
 }
 
-func HandleList(r *Resource) error {
+func HandleGetList(r *Resource) error {
 	return r.GetMany()
 }
 
