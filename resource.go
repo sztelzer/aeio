@@ -510,9 +510,9 @@ func (r *Resource) Respond(err error) {
 	}
 
 	if err != nil {
-		log.Printf("%s %s %s error: %v", status, r.Access.Request.Method, r.Access.Request.URL.Path, err)
+		log.Printf("%d %s %s error: %v", status, r.Access.Request.Method, r.Access.Request.URL.Path, err)
 	} else {
-		log.Printf("%s %s %s", status, r.Access.Request.Method, r.Access.Request.URL.Path)
+		log.Printf("%d %s %s", status, r.Access.Request.Method, r.Access.Request.URL.Path)
 	}
 
 
