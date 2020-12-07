@@ -65,7 +65,7 @@ type DataBind interface {
 // 	return NewResource(parentResource.Access, parentResource.Key, listKind)
 // }
 
-// Save puts the object into datastore, inlining CreatedAt and Parent in the object.
+// Save puts the object into datastore, inlining resource CreatedAt and Parent Key into the object.
 func (r *Resource) Save() (ps []datastore.Property, err error) {
 	r.CreatedAt = NoZeroTime(r.CreatedAt)
 	ps, err = datastore.SaveStruct(r.Data)
@@ -281,7 +281,7 @@ func (r *Resource) AssertAction(action string) (ok bool) {
 }
 
 func (r *Resource) EnterAction(action string) {
-	log.Println("entering action:", action)
+	// log.Println("entering action:", action)
 	r.ActionsHistory = append(r.ActionsHistory, action)
 	if r.AssertAction("complexError") {
 		return
@@ -509,7 +509,12 @@ func (r *Resource) Respond(err error) {
 		r.Access.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	}
 
-	log.Println(status, r.Access.Request.Method, r.Access.Request.URL.Path, err)
+	if err != nil {
+		log.Printf("%s %s %s error: %v", status, r.Access.Request.Method, r.Access.Request.URL.Path, err)
+	} else {
+		log.Printf("%s %s %s", status, r.Access.Request.Method, r.Access.Request.URL.Path)
+	}
+
 
 	j, err := json.Marshal(r)
 	if err != nil {
