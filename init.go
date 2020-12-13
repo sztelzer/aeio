@@ -17,6 +17,9 @@ var DatastoreClient *datastore.Client
 var FireApp *firebase.App
 var FireAppAuthClient *firebaseAuth.Client
 
+// On localhost with emulators, set these ENV before running the application
+// DATASTORE_EMULATOR_HOST=localhost:8081;ENVIRONMENT=DEVELOPMENT;GOOGLE_APPLICATION_CREDENTIALS=../gaeio2-firebase-adminsdk-82w3s-69fc074ae2.json
+
 func init() {
 	var err error
 
@@ -26,7 +29,6 @@ func init() {
 		log.Fatalf("error initializing datastore client: %v", err)
 	}
 
-	// in localhost it gets the key.json from ENV
 	FireApp, err = firebase.NewApp(Context, nil)
 	if err != nil {
 		log.Fatalf("error initializing firebase app: %v", err)

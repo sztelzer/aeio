@@ -22,9 +22,11 @@ func (r *Resource) Create() error {
 		return errorInvalidPath.withCause(errors.New("path key must be incomplete for creation")).withStack().withLog()
 	}
 
-	err = r.BindRequestData()
-	if err != nil {
-		return errorUnknown.withCause(err).withStack().withLog()
+	if r.Data == nil {
+		err = r.BindRequestData()
+		if err != nil {
+			return errorUnknown.withCause(err).withStack().withLog()
+		}
 	}
 
 	if data, ok := r.Data.(DataBeforeSave); ok {

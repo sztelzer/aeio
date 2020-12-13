@@ -202,10 +202,9 @@ func InitResource(access *Access, key *datastore.Key) (r *Resource) {
 	return &Resource{Key: key, Access: access}
 }
 
-// NewResource is used to create empty children resources. Parent path may be the nil (root).
+// NewResource is used to create empty children resources. Parent path may be nil (root).
 // It returns a resource with an incompleteKey.
 // It initializes an object of type kind.
-// TODO: swap access and parentKey for parentResource?
 func NewResource(access *Access, parentKey *datastore.Key, kind string) (*Resource, error) {
 	r := &Resource{Access: access}
 
