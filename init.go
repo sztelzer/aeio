@@ -6,7 +6,10 @@ import (
 	firebase "firebase.google.com/go/v4"
 	firebaseAuth "firebase.google.com/go/v4/auth"
 	"log"
+	"os"
 )
+
+var Development = false
 
 var ListSizeDefault = 20
 var ListSizeMax = 100
@@ -22,6 +25,12 @@ var FireAppAuthClient *firebaseAuth.Client
 
 func init() {
 	var err error
+
+	if os.Getenv("DEVELOPMENT") == "true" {
+		Development = true
+		log.Println("Initializing App as DEVELOPMENT")
+	}
+
 
 	Context, ContextCancel = context.WithCancel(context.Background())
 	DatastoreClient, err = datastore.NewClient(Context, datastore.DetectProjectID)
