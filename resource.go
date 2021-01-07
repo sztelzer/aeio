@@ -510,6 +510,7 @@ func (r *Resource) Respond(err error) {
 	}
 
 	if err != nil {
+		r.Access.Writer.WriteHeader(status)
 		log.Printf("%d %s %s error: %v", status, r.Access.Request.Method, r.Access.Request.URL.Path, err)
 	} else {
 		log.Printf("%d %s %s", status, r.Access.Request.Method, r.Access.Request.URL.Path)
