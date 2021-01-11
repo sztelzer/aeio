@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-var ServerHost string = "localhost"
+var ServerHost string = "0.0.0.0"
 var ServerPort string = "8080"
 
 func Serve(router http.Handler) error {
