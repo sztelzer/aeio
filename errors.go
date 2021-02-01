@@ -1,10 +1,12 @@
 package aeio
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"runtime"
+	"strings"
 )
 
 const (
@@ -106,17 +108,22 @@ var (
 )
 
 type complexError struct {
-	Name  string `json:"name"`                  // limited error name strings, like codes for mapping
+	Name  string `json:"name"`        // limited error name strings, like codes for mapping
 	Desc  string `json:"description"` // improved description of the problem for humans
 	Hint  string `json:"hint"`        // if it is a common user mistake try to educate
 	Where string `json:"stack"`
-	Code  int    `json:"-"`               // http status code caused by this error
+	Code  int    `json:"-"`     // http status code caused by this error
 	Debug string `json:"debug"` // original error message
 	cause error  // original error, only added by .withCause()
 }
 
 func (e complexError) Error() string {
-	return fmt.Sprintf("%s, %s, %s, %d, %s", e.Name, e.Desc, e.Hint, e.Code, e.Debug)
+	ej, err := json.Marshal(e)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return string(ej)
+	// return fmt.Sprintf(`name: "%s", description: "%s", hint: "%s", code: "%d", debug: "%s"`, e.Name, e.Desc, e.Hint, e.Code, e.Debug)
 }
 
 func (e complexError) withCause(cause error) complexError {
@@ -130,14 +137,25 @@ func (e complexError) withCode(code int) complexError {
 	return e
 }
 
-func (e complexError) withStack() complexError {
-	_, file, line, _ := runtime.Caller(1)
-	e.Where = fmt.Sprintf("%s:%d", file, line)
+func (e complexError) withStack(levels int) complexError {
+	stack := make([]string, 0)
+	
+	for i := 0; i < levels; i++ {
+		_, file, line, _ := runtime.Caller(i)
+		stack = append(stack, fmt.Sprintf("%s:%d", file, line))
+	}
+	
+	
+	js, _ := json.MarshalIndent(stack, "", "  ")
+	log.Print(string(js))
+	
+	
+	e.Where = fmt.Sprintf("%s", strings.Join(stack, "\n--  --\n"))
 	return e
 }
 
 func (e complexError) withLog() complexError {
-	log.Print(e.Error())
+	// log.Print(e.Error())
 	return e
 }
 
@@ -145,27 +163,3 @@ func (e complexError) withHint(hint string) complexError {
 	e.Hint = hint
 	return e
 }
-
-// func NewError(name string, err error, statusCode int, s ...string) error {
-// 	var desc, hint string
-// 	if len(s) > 0 {
-// 		desc = s[0]
-// 	} else if len(s) > 1 {
-// 		hint = s[1]
-// 	}
-//
-// 	_, file, line, _ := runtime.Caller(1)
-//
-// 	e := complexError{
-// 		Name:  name,
-// 		Desc: desc,
-// 		Hint: hint,
-// 		Debug: err.Error(),
-// 		Where: fmt.Sprintf("%s:%d", file, line),
-// 		Code:  statusCode,
-// 		cause: err,
-// 	}
-//
-// 	log.Print(e.Error())
-// 	return e
-// }

@@ -1,12 +1,13 @@
 package aeio
 
 import (
-	"cloud.google.com/go/datastore"
 	"errors"
 	"fmt"
 	"log"
 	"reflect"
 	"regexp"
+	
+	"cloud.google.com/go/datastore"
 )
 
 var validPath = regexp.MustCompile(`^(?:/[a-z]+/[0-9]+)*(/[a-z]+)?$`)
@@ -25,7 +26,7 @@ func RegisterModel(alias string, model interface{}) {
 func NewObject(alias string) (interface{}, error) {
 	if models[alias] == nil {
 		err := errors.New("Model " + alias + " is not implemented/registered.")
-		return nil, errorResourceModelNotImplemented.withCause(err).withStack().withLog()
+		return nil, errorResourceModelNotImplemented.withCause(err).withStack(10).withLog()
 	}
 	val := reflect.ValueOf(models[alias])
 	if val.Kind() == reflect.Ptr {
@@ -51,7 +52,7 @@ func RegisterPatcher(alias string, patcher interface{}) {
 func NewPatcher(alias string) (interface{}, error) {
 	if patchers[alias] == nil {
 		err := errors.New("Patcher " + alias + " is not implemented/registered.")
-		return nil, errorResourceModelNotImplemented.withCause(err).withStack().withLog()
+		return nil, errorResourceModelNotImplemented.withCause(err).withStack(10).withLog()
 	}
 	val := reflect.ValueOf(patchers[alias])
 	if val.Kind() == reflect.Ptr {
@@ -86,7 +87,7 @@ func CheckRegistry(print bool) {
 		log.Println(children)
 	}
 	for parent, children := range children {
-		for child, _ := range children {
+		for child := range children {
 			if parent != "" && models[parent] == nil {
 				log.Panicln("parent model", parent, "is not registered or defined")
 			}
@@ -102,7 +103,7 @@ func ValidatePaternity(p string, c string) error {
 	_, ok := children[p][c]
 	if !ok {
 		err := errors.New("[" + p + "] kind doesn't accept the paternity of [" + c + "] kids. You should register it first.")
-		return errorInvalidResourceChild.withCause(err).withStack()
+		return errorInvalidResourceChild.withCause(err).withStack(10)
 	}
 	return nil
 }
@@ -110,7 +111,7 @@ func ValidatePaternity(p string, c string) error {
 // ValidateKey checks if the key chain is valid, but don't check the existence of parents in datastore.
 func ValidateKey(k *datastore.Key) error {
 	if k == nil {
-		return errorInvalidPath.withStack().withLog()
+		return errorInvalidPath.withStack(10).withLog()
 	}
 	var level = 0
 	for {
@@ -155,7 +156,7 @@ func TestFunction(m string, f string) error {
 	_, ok := functions[m][f]
 	if !ok {
 		err := fmt.Errorf("model %s does not have function %s", m, f)
-		return errorInvalidModelFunction.withCause(err).withStack()
+		return errorInvalidModelFunction.withCause(err).withStack(10)
 	}
 	return nil
 }

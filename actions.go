@@ -1,11 +1,12 @@
 package aeio
 
 import (
-	"cloud.google.com/go/datastore"
 	"errors"
 	"fmt"
-	"google.golang.org/api/iterator"
 	"log"
+	
+	"cloud.google.com/go/datastore"
+	"google.golang.org/api/iterator"
 )
 
 // Create creates a new resource
@@ -15,36 +16,36 @@ func (r *Resource) Create() error {
 	defer r.ExitAction(ActionCreate)
 
 	if err = ValidateKey(r.Key); err != nil {
-		return errorInvalidPath.withCause(err).withStack().withLog()
+		return errorInvalidPath.withCause(err).withStack(10).withLog()
 	}
 
 	if !r.Key.Incomplete() {
-		return errorInvalidPath.withCause(errors.New("path key must be incomplete for creation")).withStack().withLog()
+		return errorInvalidPath.withCause(errors.New("path key must be incomplete for creation")).withStack(10).withLog()
 	}
 
 	if r.Data == nil {
 		err = r.BindRequestData()
 		if err != nil {
-			return errorUnknown.withCause(err).withStack().withLog()
+			return errorUnknown.withCause(err).withStack(10).withLog()
 		}
 	}
 
 	if data, ok := r.Data.(DataBeforeSave); ok {
 		err := data.BeforeSave(r)
 		if err != nil {
-			return errorUnknown.withCause(err).withStack().withLog()
+			return errorUnknown.withCause(err).withStack(10).withLog()
 		}
 	}
 
 	r.Key, err = DatastoreClient.Put(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
-		return errorDatastorePut.withCause(err).withStack().withLog()
+		return errorDatastorePut.withCause(err).withStack(10).withLog()
 	}
 
 	if data, ok := r.Data.(DataAfterSave); ok {
 		err := data.AfterSave(r)
 		if err != nil {
-			return errorUnknown.withCause(err).withStack().withLog()
+			return errorUnknown.withCause(err).withStack(10).withLog()
 		}
 	}
 
@@ -58,11 +59,11 @@ func (r *Resource) Update() error {
 
 	err = ValidateKey(r.Key)
 	if err != nil {
-		return errorInvalidPath.withCause(err).withStack().withLog()
+		return errorInvalidPath.withCause(err).withStack(10).withLog()
 	}
 
 	if r.Key.Incomplete() {
-		return errorInvalidPath.withCause(errors.New("path key must be complete for update")).withStack().withLog()
+		return errorInvalidPath.withCause(errors.New("path key must be complete for update")).withStack(10).withLog()
 	}
 
 	if r.Data == nil {
@@ -73,26 +74,26 @@ func (r *Resource) Update() error {
 
 		err = r.BindRequestData()
 		if err != nil {
-			return errorUnknown.withCause(err).withStack().withLog()
+			return errorUnknown.withCause(err).withStack(10).withLog()
 		}
 	}
 
 	if data, ok := r.Data.(DataBeforeSave); ok {
 		err := data.BeforeSave(r)
 		if err != nil {
-			return errorUnknown.withCause(err).withStack().withLog()
+			return errorUnknown.withCause(err).withStack(10).withLog()
 		}
 	}
 
 	r.Key, err = DatastoreClient.Put(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
-		return errorDatastorePut.withCause(err).withStack().withLog()
+		return errorDatastorePut.withCause(err).withStack(10).withLog()
 	}
 
 	if data, ok := r.Data.(DataAfterSave); ok {
 		err := data.AfterSave(r)
 		if err != nil {
-			return errorUnknown.withCause(err).withStack().withLog()
+			return errorUnknown.withCause(err).withStack(10).withLog()
 		}
 	}
 
@@ -108,35 +109,35 @@ func (r *Resource) Get() error {
 	defer r.ExitAction(ActionRead)
 
 	if r.Key.Incomplete() {
-		return errorInvalidPath.withHint(fmt.Sprintf("%s", "The key passed to read is incomplete")).withStack().withLog()
+		return errorInvalidPath.withHint(fmt.Sprintf("%s", "The key passed to read is incomplete")).withStack(10).withLog()
 	}
 
 	err = ValidateKey(r.Key)
 	if err != nil {
-		return errorUnknown.withCause(err).withStack().withLog()
+		return errorUnknown.withCause(err).withStack(10).withLog()
 	}
 
 	r.Data, err = NewObject(r.Key.Kind)
 	if err != nil {
-		return errorUnknown.withCause(err).withStack().withLog()
+		return errorUnknown.withCause(err).withStack(10).withLog()
 	}
 
 	if data, ok := r.Data.(DataBeforeLoad); ok {
 		err = data.BeforeLoad(r)
 		if err != nil {
-			return errorUnknown.withCause(err).withStack().withLog()
+			return errorUnknown.withCause(err).withStack(10).withLog()
 		}
 	}
 
 	err = DatastoreClient.Get(r.Access.Request.Context(), r.Key, r)
 	if err != nil {
-		return errorDatastoreRead.withCause(err).withStack().withLog()
+		return errorDatastoreRead.withCause(err).withStack(10).withLog()
 	}
 
 	if data, ok := r.Data.(DataAfterLoad); ok {
 		err = data.AfterLoad(r)
 		if err != nil {
-			return errorUnknown.withCause(err).withStack().withLog()
+			return errorUnknown.withCause(err).withStack(10).withLog()
 		}
 	}
 
@@ -151,12 +152,12 @@ func (r *Resource) GetMany() error {
 
 	// key must be incomplete
 	if !r.Key.Incomplete() {
-		return errorInvalidPath.withHint("Lists only works under models, not ids: remove the id from the end of path").withStack().withLog()
+		return errorInvalidPath.withHint("Lists only works under models, not ids: remove the id from the end of path").withStack(10).withLog()
 	}
 
 	err = ValidateKey(r.Key)
 	if err != nil {
-		return errorUnknown.withCause(err).withStack().withLog()
+		return errorUnknown.withCause(err).withStack(10).withLog()
 	}
 
 	q := datastore.NewQuery(r.Key.Kind)
@@ -166,7 +167,7 @@ func (r *Resource) GetMany() error {
 
 	err = r.RunListQuery(q)
 	if err != nil {
-		return errorUnknown.withCause(err).withStack().withLog()
+		return errorUnknown.withCause(err).withStack(10).withLog()
 	}
 
 	return nil
@@ -179,12 +180,12 @@ func (r *Resource) GetManyCount() error {
 
 	// key must be incomplete
 	if !r.Key.Incomplete() {
-		return errorInvalidPath.withHint("Lists only works under models, not ids: remove the id from the end of path").withStack().withLog()
+		return errorInvalidPath.withHint("Lists only works under models, not ids: remove the id from the end of path").withStack(10).withLog()
 	}
 
 	err = ValidateKey(r.Key)
 	if err != nil {
-		return errorUnknown.withCause(err).withStack().withLog()
+		return errorUnknown.withCause(err).withStack(10).withLog()
 	}
 
 	q := datastore.NewQuery(r.Key.Kind)
@@ -194,7 +195,7 @@ func (r *Resource) GetManyCount() error {
 
 	count, err := DatastoreClient.Count(r.Access.Request.Context(), q)
 	if err != nil {
-		return errorUnknown.withCause(err).withStack().withLog()
+		return errorUnknown.withCause(err).withStack(10).withLog()
 	}
 
 	r.ResourcesCount = &count
@@ -228,7 +229,7 @@ func (r *Resource) GetAny() error {
 
 	err = r.RunListQuery(q)
 	if err != nil {
-		return errorUnknown.withCause(err).withStack().withLog()
+		return errorUnknown.withCause(err).withStack(10).withLog()
 	}
 
 	return nil
@@ -253,7 +254,7 @@ func (r *Resource) RunListQuery(q *datastore.Query) error {
 	if next != "" {
 		cursor, err = datastore.DecodeCursor(next)
 		if err != nil {
-			return errorDatastoreInvalidCursor.withCause(err).withStack()
+			return errorDatastoreInvalidCursor.withCause(err).withStack(10)
 		}
 		q = q.Start(cursor)
 	}
@@ -292,7 +293,7 @@ func (r *Resource) RunListQuery(q *datastore.Query) error {
 			r.Next = ""
 			break
 		} else if iteErr != nil {
-			return errorUnknown.withCause(iteErr).withStack().withLog()
+			return errorUnknown.withCause(iteErr).withStack(10).withLog()
 		}
 
 		// TODO: Just for using BeforeLoad we need to copy data two times because of the temp. Check if next and get are equivalent and use only one get.
@@ -303,19 +304,19 @@ func (r *Resource) RunListQuery(q *datastore.Query) error {
 					log.Print(err)
 				}
 				r.Resources = append(r.Resources, nr)
-				return errorUnknown.withCause(err).withStack()
+				return errorUnknown.withCause(err).withStack(10)
 			}
 		}
 
 		if err := nrTemp.CopyData(nr); err != nil {
-			return errorUnknown.withCause(err).withStack()
+			return errorUnknown.withCause(err).withStack(10)
 		}
 
 		if data, ok := nr.Data.(DataAfterLoad); ok {
 			err = data.AfterLoad(nr)
 			if err != nil {
 				r.Resources = append(r.Resources, nr)
-				return errorUnknown.withCause(err).withStack()
+				return errorUnknown.withCause(err).withStack(10)
 			}
 		}
 
@@ -345,19 +346,19 @@ func (r *Resource) Delete() error {
 	if data, ok := r.Data.(DataBeforeDelete); ok {
 		err = data.BeforeDelete(r)
 		if err != nil {
-			return errorUnknown.withCause(err).withStack().withLog()
+			return errorUnknown.withCause(err).withStack(10).withLog()
 		}
 	}
 
 	err = DatastoreClient.Delete(r.Access.Request.Context(), r.Key)
 	if err != nil {
-		return errorDatastoreDelete.withCause(err).withStack().withLog()
+		return errorDatastoreDelete.withCause(err).withStack(10).withLog()
 	}
 
 	if data, ok := r.Data.(DataAfterDelete); ok {
 		err = data.AfterDelete(r)
 		if err != nil {
-			return errorUnknown.withCause(err).withStack().withLog()
+			return errorUnknown.withCause(err).withStack(10).withLog()
 		}
 	}
 

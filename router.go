@@ -7,12 +7,16 @@ import (
 	"os"
 )
 
-var ServerHost string = "0.0.0.0"
-var ServerPort string = "8080"
+var ServerHost = ""
+var ServerPort = "8080"
 
 func Serve(router http.Handler) error {
 	var err error
 
+	if Development {
+		ServerHost = "127.0.0.1"
+	}
+	
 	port := os.Getenv("PORT")
 	if port != "" {
 		ServerPort = port

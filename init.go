@@ -1,12 +1,13 @@
 package aeio
 
 import (
-	"cloud.google.com/go/datastore"
 	"context"
-	firebase "firebase.google.com/go/v4"
-	firebaseAuth "firebase.google.com/go/v4/auth"
 	"log"
 	"os"
+	
+	"cloud.google.com/go/datastore"
+	firebase "firebase.google.com/go/v4"
+	firebaseAuth "firebase.google.com/go/v4/auth"
 )
 
 var Development = false
@@ -25,29 +26,28 @@ var FireAppAuthClient *firebaseAuth.Client
 
 func init() {
 	var err error
-
+	
 	if os.Getenv("DEVELOPMENT") == "true" {
 		Development = true
 		log.Println("Initializing App as DEVELOPMENT")
 	}
-
-
+	
 	Context, ContextCancel = context.WithCancel(context.Background())
 	DatastoreClient, err = datastore.NewClient(Context, datastore.DetectProjectID)
 	if err != nil {
 		log.Fatalf("error initializing datastore client: %v", err)
 	}
-
+	
 	FireApp, err = firebase.NewApp(Context, nil)
 	if err != nil {
 		log.Fatalf("error initializing firebase app: %v", err)
 	}
-
+	
 	FireAppAuthClient, err = FireApp.Auth(Context)
 	if err != nil {
 		log.Fatalf("error initializing firebase auth client: %v", err)
 	}
-
+	
 }
 
 // ShutdownApplication should be called anytime the app exits to close services connections.
@@ -64,6 +64,6 @@ func ShutdownApplication() {
 	if err != nil {
 		log.Print("error_closing_datastore_client:", err)
 	}
-
+	
 	ContextCancel()
 }

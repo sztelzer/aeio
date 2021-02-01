@@ -1,7 +1,6 @@
 package aeio
 
 import (
-	"cloud.google.com/go/datastore"
 	"log"
 	"math"
 	"net/http"
@@ -10,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	
+	"cloud.google.com/go/datastore"
 )
 
 // AncestorKindKey returns the key of the nearest specified kind ancestor for any given key.
@@ -190,7 +191,7 @@ func NewResourceFromRequest(writer *http.ResponseWriter, request *http.Request) 
 	r.Access = newAccess(writer, request)
 	r.Key = Key(r.Access.Request.URL.Path)
 	if r.Key == nil {
-		return r, errorInvalidPath.withStack()
+		return r, errorInvalidPath.withStack(10)
 	}
 	return r, nil
 }
@@ -224,7 +225,7 @@ func NewResource(access *Access, parentKey *datastore.Key, kind string) (*Resour
 	}
 
 	if r.Key == nil {
-		return nil, errorInvalidPath.withStack()
+		return nil, errorInvalidPath.withStack(10)
 	}
 	r.Data, err = NewObject(kind)
 	if err != nil {

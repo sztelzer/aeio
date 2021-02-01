@@ -1,15 +1,16 @@
 package aeio
 
 import (
-	"cloud.google.com/go/datastore"
 	"encoding/json"
 	"fmt"
-	patchstruct "github.com/sztelzer/structpatch"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"reflect"
 	"time"
+
+	"cloud.google.com/go/datastore"
+	patchstruct "github.com/sztelzer/structpatch"
 )
 
 // Resource is the main structure holding meta data of connection, the data itself, and many methods of control.
@@ -95,9 +96,10 @@ func (r *Resource) Load(ps []datastore.Property) (err error) {
 	return
 }
 
+// NewData initializes the Data object with the provided alias type
 func (r *Resource) NewData(kind string) error {
 	if models[kind] == nil {
-		return errorResourceModelNotImplemented.withStack()
+		return errorResourceModelNotImplemented.withStack(10)
 	}
 	val := reflect.ValueOf(models[kind])
 	if val.Kind() == reflect.Ptr {
@@ -121,19 +123,19 @@ func (r *Resource) BindRequestData() error {
 	}
 
 	if r.Access.Request.ContentLength < 2 {
-		return errorEmptyRequestBody.withStack()
+		return errorEmptyRequestBody.withStack(10)
 	}
 
 	bodyContent, err := ioutil.ReadAll(r.Access.Request.Body)
 	if err != nil {
-		return errorRequestBodyRead.withCause(err).withStack()
+		return errorRequestBodyRead.withCause(err).withStack(10)
 	}
 
 	if !r.AssertAction(ActionUpdate) {
 		// load directly into r.Data
 		err = json.Unmarshal(bodyContent, &r.Data)
 		if err != nil {
-			return errorRequestUnmarshal.withCause(err).withStack()
+			return errorRequestUnmarshal.withCause(err).withStack(10)
 		}
 		return nil
 	}
@@ -148,19 +150,19 @@ func (r *Resource) BindRequestData() error {
 	if err != nil {
 		patcher, err = NewObject(r.Key.Kind)
 		if err != nil {
-			return errorRequestUnmarshal.withCause(err).withStack().withLog()
+			return errorRequestUnmarshal.withCause(err).withStack(10).withLog()
 		}
 	}
 
 	// load data from request into temporary requestData
 	err = json.Unmarshal(bodyContent, &patcher)
 	if err != nil {
-		return errorRequestUnmarshal.withCause(err).withStack().withLog()
+		return errorRequestUnmarshal.withCause(err).withStack(10).withLog()
 	}
 
 	err = patchstruct.Patch(patcher, r.Data, "ignored")
 	if err != nil {
-		return errorRequestUnmarshal.withCause(err).withStack().withLog()
+		return errorRequestUnmarshal.withCause(err).withStack(10).withLog()
 	}
 
 	return nil
@@ -237,11 +239,11 @@ func (r *Resource) CheckAncestors() error {
 			var c int
 			c, err = DatastoreClient.Count(r.Access.Request.Context(), q)
 			if err != nil {
-				return errorDatastoreCount.withCause(err).withStack()
+				return errorDatastoreCount.withCause(err).withStack(10)
 			}
 			if c == 0 {
 				err = fmt.Errorf(Path(k))
-				return errorDatastoreAncestorNotFound.withCause(err).withStack()
+				return errorDatastoreAncestorNotFound.withCause(err).withStack(10)
 			}
 		} else {
 			return nil
@@ -501,7 +503,7 @@ func (r *Resource) Respond(err error) {
 		r.error = err
 		status = err.(complexError).Code
 		if http.StatusText(status) == "" {
-			r.error = errorInvalidHttpStatusCode.withCause(err).withStack()
+			r.error = errorInvalidHttpStatusCode.withCause(err).withStack(10)
 		}
 	}
 
@@ -511,7 +513,7 @@ func (r *Resource) Respond(err error) {
 
 	if err != nil {
 		r.Access.Writer.WriteHeader(status)
-		log.Printf("%d %s %s error: %v", status, r.Access.Request.Method, r.Access.Request.URL.Path, err)
+		log.Printf("%d %s %s error: %+v", status, r.Access.Request.Method, r.Access.Request.URL.Path, err)
 	} else {
 		log.Printf("%d %s %s", status, r.Access.Request.Method, r.Access.Request.URL.Path)
 	}
@@ -519,12 +521,12 @@ func (r *Resource) Respond(err error) {
 
 	j, err := json.Marshal(r)
 	if err != nil {
-		_ = errorResponseMarshal.withCause(err).withStack().withLog()
+		_ = errorResponseMarshal.withCause(err).withStack(10).withLog()
 	}
 
 	_, err = r.Access.Writer.Write(j)
 	if err != nil {
-		_ = errorResponseWrite.withCause(err).withStack().withLog()
+		_ = errorResponseWrite.withCause(err).withStack(10).withLog()
 	}
 }
 
