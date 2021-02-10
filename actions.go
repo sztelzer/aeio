@@ -275,6 +275,8 @@ func (r *Resource) RunListQuery(q *datastore.Query) error {
 		// this is the use case of a NewClone() method for r
 		nr := new(Resource)
 		nr.Access = r.Access
+		nr.ActionsStack = r.ActionsStack
+		
 		nr.Data, err = NewObject(r.Key.Kind)
 		if err != nil {
 			return err

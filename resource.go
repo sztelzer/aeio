@@ -67,15 +67,38 @@ type DataBind interface {
 // }
 
 // Save puts the object into datastore, inlining resource CreatedAt and Parent Key into the object.
+// TODO: the problem with repeated CreatedAt on objects is to access directly the datastore without the resource, which \
+//  happens in transactions. We could pass, optionally, a transaction to actions, and this problem would be gone.
+// TODO: it's possible that modern datastore has already the parent field
 func (r *Resource) Save() (ps []datastore.Property, err error) {
 	r.CreatedAt = NoZeroTime(r.CreatedAt)
 	ps, err = datastore.SaveStruct(r.Data)
 	if err != nil {
 		return nil, err
 	}
-	ps = append(ps, datastore.Property{Name: "CreatedAt", Value: r.CreatedAt})
+
+	// check if object data already put these fields
+	hasCreatedAt := false
+	hasParent := false
+	for _, v := range ps {
+		if v.Name == "CreatedAt" {
+			hasCreatedAt = true
+			continue
+		}
+		if v.Name == "Parent" {
+			hasParent = true
+			continue
+		}
+	}
+
+	if !hasCreatedAt {
+		ps = append(ps, datastore.Property{Name: "CreatedAt", Value: r.CreatedAt})
+	}
+	
 	if r.Key != nil {
-		ps = append(ps, datastore.Property{Name: "Parent", Value: r.Key.Parent})
+		if !hasParent {
+			ps = append(ps, datastore.Property{Name: "Parent", Value: r.Key.Parent})
+		}
 	}
 	return ps, nil
 }
