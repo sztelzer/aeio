@@ -146,11 +146,11 @@ func (e complexError) withStack(levels int) complexError {
 	}
 	
 	
-	js, _ := json.MarshalIndent(stack, "", "  ")
-	log.Print(string(js))
+	// js, _ := json.MarshalIndent(stack, "", "  ")
+	// log.Print(string(js))
 	
 	
-	e.Where = fmt.Sprintf("%s", strings.Join(stack, "\n--  --\n"))
+	e.Where = fmt.Sprintf("%s", strings.Join(stack, " -- "))
 	return e
 }
 
