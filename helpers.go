@@ -1,6 +1,7 @@
 package aeio
 
 import (
+	"errors"
 	"log"
 	"math"
 	"net/http"
@@ -281,3 +282,26 @@ func Path(k *datastore.Key) (p string) {
 	return p
 }
 
+
+
+func CheckAdminToken(request *http.Request) error {
+	jwtToken := request.Header.Get("Authorization")
+	
+	token, err := FireAppAuthClient.VerifyIDToken(request.Context(), jwtToken)
+	if err != nil {
+		log.Println("error verifying token")
+		return err
+	}
+	
+	_, ok := token.Claims["userId"]
+	if !ok {
+		return errors.New("token_not_linked")
+	}
+	
+	userAdminClaim, ok := token.Claims["role"]
+	if !ok || userAdminClaim != "admin" {
+		return errors.New("token_not_admin")
+	}
+	
+	return nil
+}

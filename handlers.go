@@ -18,7 +18,7 @@ func HandleGetList(r *Resource) error {
 	return r.GetMany()
 }
 
-func HandleListAny(r *Resource) error {
+func HandleGetAny(r *Resource) error {
 	return r.GetAny()
 }
 

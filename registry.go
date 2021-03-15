@@ -10,7 +10,7 @@ import (
 	"cloud.google.com/go/datastore"
 )
 
-var validPath = regexp.MustCompile(`^(?:/[a-z]+/[0-9]+)*(/[a-z]+)?$`)
+var validPath = regexp.MustCompile(`^(?:/[a-z-]+/[0-9]+)*(/[a-z-]+)?$`)
 
 // models allow aeio to instantiate new objects based on keys and paths.
 var models = make(map[string]interface{})

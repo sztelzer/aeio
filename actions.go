@@ -215,10 +215,10 @@ func (r *Resource) GetAny() error {
 		return errorInvalidPath
 	}
 
-	err = ValidateKey(r.Key)
-	if err != nil {
-		return err
-	}
+	// err = ValidateKey(r.Key)
+	// if err != nil {
+	// 	return err
+	// }
 
 	log.Println(r.Key.String(), r.Key.Kind)
 
