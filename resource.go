@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"reflect"
 	"time"
-
+	
 	"cloud.google.com/go/datastore"
 	patchstruct "github.com/sztelzer/structpatch"
 )
@@ -28,8 +28,8 @@ type Resource struct {
 	ActionsStack   []string       `datastore:"-" json:"-"`
 	ActionsHistory []string       `datastore:"-" json:"-"`
 	Resources      []*Resource    `datastore:"-" json:"resources,omitempty"`
-	ResourcesCount *int            `datastore:"-" json:"resourcesCount,omitempty"`
-	Next           string         `datastore:"-" json:"-"`
+	ResourcesCount *int           `datastore:"-" json:"resourcesCount,omitempty"`
+	Next           string         `datastore:"-" json:"next"`
 	TimeElapsed    int64          `datastore:"-" json:"timeElapsed,omitempty"`
 }
 
@@ -76,7 +76,7 @@ func (r *Resource) Save() (ps []datastore.Property, err error) {
 	if err != nil {
 		return nil, err
 	}
-
+	
 	// check if object data already put these fields
 	hasCreatedAt := false
 	hasParent := false
@@ -90,7 +90,7 @@ func (r *Resource) Save() (ps []datastore.Property, err error) {
 			continue
 		}
 	}
-
+	
 	if !hasCreatedAt {
 		ps = append(ps, datastore.Property{Name: "CreatedAt", Value: r.CreatedAt})
 	}
@@ -132,7 +132,6 @@ func (r *Resource) NewData(kind string) error {
 	return nil
 }
 
-
 // BindRequestData takes the request data to the object data it will always respect the json tag of fields,
 // and on specifically action UPDATE will bind only allowed fields. This is useful for locking fields on
 // the original state.
@@ -144,16 +143,16 @@ func (r *Resource) BindRequestData() error {
 			return err
 		}
 	}
-
+	
 	if r.Access.Request.ContentLength < 2 {
 		return errorEmptyRequestBody.withStack(10)
 	}
-
+	
 	bodyContent, err := ioutil.ReadAll(r.Access.Request.Body)
 	if err != nil {
 		return errorRequestBodyRead.withCause(err).withStack(10)
 	}
-
+	
 	if !r.AssertAction(ActionUpdate) {
 		// load directly into r.Data
 		err = json.Unmarshal(bodyContent, &r.Data)
@@ -162,11 +161,11 @@ func (r *Resource) BindRequestData() error {
 		}
 		return nil
 	}
-
+	
 	// ok, it's UPDATE
 	// Let's load into a temporary Data, and only copy
 	// non empty, non locked fields
-
+	
 	// create patcher temporary object
 	var patcher interface{}
 	patcher, err = NewPatcher(r.Key.Kind)
@@ -176,18 +175,18 @@ func (r *Resource) BindRequestData() error {
 			return errorRequestUnmarshal.withCause(err).withStack(10).withLog()
 		}
 	}
-
+	
 	// load data from request into temporary requestData
 	err = json.Unmarshal(bodyContent, &patcher)
 	if err != nil {
 		return errorRequestUnmarshal.withCause(err).withStack(10).withLog()
 	}
-
+	
 	err = patchstruct.Patch(patcher, r.Data, "ignored")
 	if err != nil {
 		return errorRequestUnmarshal.withCause(err).withStack(10).withLog()
 	}
-
+	
 	return nil
 }
 
@@ -214,17 +213,15 @@ func (r *Resource) BindRequestData() error {
 // 	return dst
 // }
 
-
-
 func (r *Resource) CopyData(dst *Resource) error {
 	var p datastore.PropertyList
 	var err error
-
+	
 	p, err = r.Save()
 	if err != nil {
 		return err
 	}
-
+	
 	err = dst.Load(p)
 	return err
 }
@@ -311,7 +308,7 @@ func (r *Resource) EnterAction(action string) {
 	if r.AssertAction("complexError") {
 		return
 	}
-
+	
 	ValidAction(action)
 	// if len(r.ActionsStack) > 0 {
 	// 	if r.ActionsStack[len(r.ActionsStack)-1] == action {
@@ -325,7 +322,7 @@ func (r *Resource) ExitAction(action string) {
 	if r.AssertAction("complexError") && action != "complexError" {
 		return
 	}
-
+	
 	ValidAction(action)
 	if len(r.ActionsStack) > 0 {
 		if r.ActionsStack[len(r.ActionsStack)-1] != action {
@@ -513,7 +510,7 @@ func (r *Resource) ExitAction(action string) {
 // of the status passed to Respond.
 func (r *Resource) Respond(err error) {
 	var status = http.StatusOK
-
+	
 	if err != nil {
 		switch err.(type) {
 		case complexError:
@@ -522,31 +519,30 @@ func (r *Resource) Respond(err error) {
 			err = errorUnknown.withCause(err)
 			break
 		}
-
+		
 		r.error = err
 		status = err.(complexError).Code
 		if http.StatusText(status) == "" {
 			r.error = errorInvalidHttpStatusCode.withCause(err).withStack(10)
 		}
 	}
-
+	
 	if r.Access.Writer.Header().Get("Content-Type") == "" {
 		r.Access.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	}
-
+	
 	if err != nil {
 		r.Access.Writer.WriteHeader(status)
 		log.Printf("%d %s %s error: %+v", status, r.Access.Request.Method, r.Access.Request.URL.Path, err)
 	} else {
 		log.Printf("%d %s %s", status, r.Access.Request.Method, r.Access.Request.URL.Path)
 	}
-
-
+	
 	j, err := json.Marshal(r)
 	if err != nil {
 		_ = errorResponseMarshal.withCause(err).withStack(10).withLog()
 	}
-
+	
 	_, err = r.Access.Writer.Write(j)
 	if err != nil {
 		_ = errorResponseWrite.withCause(err).withStack(10).withLog()

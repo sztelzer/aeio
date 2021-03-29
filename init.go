@@ -12,8 +12,9 @@ import (
 
 var Development = false
 
-var ListSizeDefault = 1000
-var ListSizeMax = 1000
+var QuerySizeDefault = 100
+var QuerySizeMax = 1000
+
 var Context context.Context
 var ContextCancel context.CancelFunc
 var DatastoreClient *datastore.Client
