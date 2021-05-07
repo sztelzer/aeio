@@ -14,13 +14,13 @@ func Serve(router http.Handler) error {
 	var err error
 
 	if Development {
-		ServerHost = "0.0.0.0"
+		ServerHost = "127.0.0.1"
 	}
 	
 	port := os.Getenv("PORT")
 	if port != "" {
 		ServerPort = port
-		ServerHost = ""
+		// ServerHost = ""
 	}
 	connectionString := fmt.Sprintf("%s:%s", ServerHost, ServerPort)
 
