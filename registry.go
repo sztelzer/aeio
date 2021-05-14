@@ -6,7 +6,7 @@ import (
 	"log"
 	"reflect"
 	"regexp"
-	
+
 	"cloud.google.com/go/datastore"
 )
 

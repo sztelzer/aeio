@@ -16,7 +16,7 @@ func Serve(router http.Handler) error {
 	if Development {
 		ServerHost = "127.0.0.1"
 	}
-	
+
 	port := os.Getenv("PORT")
 	if port != "" {
 		ServerPort = port
