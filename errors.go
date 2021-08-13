@@ -139,17 +139,15 @@ func (e complexError) withCode(code int) complexError {
 
 func (e complexError) withStack(levels int) complexError {
 	stack := make([]string, 0)
-	
+
 	for i := 0; i < levels; i++ {
 		_, file, line, _ := runtime.Caller(i)
 		stack = append(stack, fmt.Sprintf("%s:%d", file, line))
 	}
-	
-	
+
 	// js, _ := json.MarshalIndent(stack, "", "  ")
 	// log.Print(string(js))
-	
-	
+
 	e.Where = fmt.Sprintf("%s", strings.Join(stack, " -- "))
 	return e
 }
